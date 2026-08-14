@@ -1,5 +1,9 @@
 import { router } from "expo-router";
+import * as SecureStore from "expo-secure-store";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -8,8 +12,85 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { API_URL } from "../../constants/api";
+
+type UserProfile = {
+  _id: string;
+  username: string;
+  email: string;
+  bio: string;
+  avatar: string;
+  skills: string[];
+};
 
 export default function ProfileScreen() {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchProfile = async () => {
+    try {
+      const token = await SecureStore.getItemAsync("token");
+
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/auth/me`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert("Błąd", data.message || "Nie udało się pobrać profilu.");
+
+        return;
+      }
+
+      setUser(data);
+    } catch (error) {
+      console.error("Profile error:", error);
+
+      Alert.alert("Błąd połączenia", "Nie udało się połączyć z backendem.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await SecureStore.deleteItemAsync("token");
+
+    router.replace("/welcome");
+  };
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text>Nie udało się pobrać profilu.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -24,10 +105,10 @@ export default function ProfileScreen() {
             />
           </View>
 
-          <Text style={styles.username}>@piotrek_dev</Text>
+          <Text style={styles.username}>@{user.username}</Text>
 
           <Text style={styles.description}>
-            Pomagam lokalnie i wykonuję szybkie zlecenia w swojej okolicy.
+            {user.bio || "Brak opisu profilu."}
           </Text>
 
           <Pressable
@@ -37,10 +118,7 @@ export default function ProfileScreen() {
             <Text style={styles.editButtonText}>Edytuj profil</Text>
           </Pressable>
 
-          <Pressable
-            style={styles.logoutButton}
-            onPress={() => router.replace("/welcome")}
-          >
+          <Pressable style={styles.logoutButton} onPress={handleLogout}>
             <Text style={styles.logoutButtonText}>Wyloguj</Text>
           </Pressable>
         </View>
@@ -67,8 +145,7 @@ export default function ProfileScreen() {
 
           <View style={styles.infoCard}>
             <Text style={styles.infoText}>
-              Zajmuję się pomocą przy drobnych pracach, transportem i lokalnymi
-              zleceniami.
+              {user.bio || "Brak informacji o użytkowniku."}
             </Text>
           </View>
         </View>
@@ -77,17 +154,15 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Umiejętności</Text>
 
           <View style={styles.tagsContainer}>
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>Transport</Text>
-            </View>
-
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>Naprawy</Text>
-            </View>
-
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>Pomoc lokalna</Text>
-            </View>
+            {user.skills.length > 0 ? (
+              user.skills.map((skill) => (
+                <View key={skill} style={styles.tag}>
+                  <Text style={styles.tagText}>{skill}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.infoText}>Brak dodanych umiejętności.</Text>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -100,32 +175,44 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F5F5FA",
   },
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: 30,
   },
+
   heroSection: {
     alignItems: "center",
     marginBottom: 32,
   },
+
   avatarWrapper: {
     backgroundColor: "#ECEBFA",
     borderRadius: 999,
     padding: 18,
     marginBottom: 20,
   },
+
   avatar: {
     width: 150,
     height: 150,
   },
+
   username: {
     fontSize: 30,
     fontWeight: "800",
     color: "#1E2A5A",
     marginBottom: 10,
   },
+
   description: {
     fontSize: 15,
     color: "#6B7280",
@@ -133,6 +220,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     paddingHorizontal: 12,
   },
+
   editButton: {
     marginTop: 20,
     backgroundColor: "#4F7BFF",
@@ -140,11 +228,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 16,
   },
+
   editButtonText: {
     color: "white",
     fontWeight: "700",
     fontSize: 14,
   },
+
   logoutButton: {
     marginTop: 12,
     backgroundColor: "white",
@@ -154,17 +244,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
+
   logoutButtonText: {
     color: "#EF4444",
     fontWeight: "700",
     fontSize: 14,
   },
+
   statsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 12,
     marginBottom: 32,
   },
+
   statCard: {
     flex: 1,
     backgroundColor: "white",
@@ -172,47 +265,56 @@ const styles = StyleSheet.create({
     paddingVertical: 22,
     alignItems: "center",
   },
+
   statValue: {
     fontSize: 24,
     fontWeight: "800",
     color: "#4F7BFF",
     marginBottom: 6,
   },
+
   statLabel: {
     fontSize: 13,
     color: "#6B7280",
     fontWeight: "600",
   },
+
   section: {
     marginBottom: 28,
   },
+
   sectionTitle: {
     fontSize: 20,
     fontWeight: "700",
     color: "#1E2A5A",
     marginBottom: 14,
   },
+
   infoCard: {
     backgroundColor: "white",
     borderRadius: 20,
     padding: 20,
   },
+
   infoText: {
     color: "#4B5563",
     fontSize: 15,
     lineHeight: 24,
   },
+
   tagsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
+
   tag: {
     backgroundColor: "#ECEBFA",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 999,
   },
+
   tagText: {
     color: "#4F7BFF",
     fontWeight: "600",
