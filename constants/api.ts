@@ -1,2 +1,1 @@
-export const API_URL = "http://192.168.1.144:3000";
-// atbcore50
+export const API_URL = "https://zarobse.onrender.com";
