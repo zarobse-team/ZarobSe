@@ -1,56 +1,89 @@
 import mongoose, { Document, Schema } from "mongoose";
 
 export interface IUser extends Document {
-  username: string;
-  email: string;
-  password: string;
-  bio?: string;
-  avatar?: string;
-  skills: string[];
-  createdAt: Date;
-  updatedAt: Date;
+	firstName: string;
+	lastName: string;
+	email: string;
+	phone: string;
+	password: string;
+	city?: string;
+	bio?: string;
+	avatar?: string;
+	skills: string[];
+	role: "user" | "admin";
+	isBlocked: boolean;
+	createdAt: Date;
+	updatedAt: Date;
 }
 
 const UserSchema = new Schema<IUser>(
-  {
-    username: {
-      type: String,
-      required: true,
-      trim: true,
-      unique: true,
-    },
+	{
+		firstName: {
+			type: String,
+			required: true,
+			trim: true,
+		},
 
-    email: {
-      type: String,
-      required: true,
-      trim: true,
-      unique: true,
-      lowercase: true,
-    },
+		lastName: {
+			type: String,
+			required: true,
+			trim: true,
+		},
 
-    password: {
-      type: String,
-      required: true,
-    },
+		email: {
+			type: String,
+			required: true,
+			trim: true,
+			unique: true,
+			lowercase: true,
+		},
 
-    bio: {
-      type: String,
-      default: "",
-    },
+		phone: {
+			type: String,
+			required: true,
+			trim: true,
+		},
 
-    avatar: {
-      type: String,
-      default: "",
-    },
+		password: {
+			type: String,
+			required: true,
+		},
 
-    skills: {
-      type: [String],
-      default: [],
-    },
-  },
-  {
-    timestamps: true,
-  },
+		city: {
+			type: String,
+			default: "",
+			trim: true,
+		},
+
+		bio: {
+			type: String,
+			default: "",
+		},
+
+		avatar: {
+			type: String,
+			default: "",
+		},
+
+		skills: {
+			type: [String],
+			default: [],
+		},
+
+		role: {
+			type: String,
+			enum: ["user", "admin"],
+			default: "user",
+		},
+
+		isBlocked: {
+			type: Boolean,
+			default: false,
+		},
+	},
+	{
+		timestamps: true,
+	},
 );
 
 const User = mongoose.model<IUser>("User", UserSchema);

@@ -2,322 +2,356 @@ import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+	ActivityIndicator,
+	Alert,
+	Image,
+	Pressable,
+	ScrollView,
+	StyleSheet,
+	Text,
+	View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_URL } from "../../constants/api";
 
 type UserProfile = {
-  _id: string;
-  username: string;
-  email: string;
-  bio: string;
-  avatar: string;
-  skills: string[];
+	_id: string;
+	firstName: string;
+	lastName: string;
+	email: string;
+	phone: string;
+	city: string;
+	bio: string;
+	avatar: string;
+	skills: string[];
 };
 
 export default function ProfileScreen() {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+	const [user, setUser] = useState<UserProfile | null>(null);
+	const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async () => {
-    try {
-      const token = await SecureStore.getItemAsync("token");
+	const fetchProfile = async () => {
+		try {
+			const token = await SecureStore.getItemAsync("token");
 
-      if (!token) {
-        router.replace("/login");
-        return;
-      }
+			if (!token) {
+				router.replace("/login");
+				return;
+			}
 
-      const response = await fetch(`${API_URL}/api/auth/me`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+			const response = await fetch(`${API_URL}/api/auth/me`, {
+				method: "GET",
+				headers: {
+					Authorization: `Bearer ${token}`,
+				},
+			});
 
-      const data = await response.json();
+			const data = await response.json();
 
-      if (!response.ok) {
-        Alert.alert("Błąd", data.message || "Nie udało się pobrać profilu.");
+			if (!response.ok) {
+				Alert.alert("Błąd", data.message || "Nie udało się pobrać profilu.");
+				return;
+			}
 
-        return;
-      }
+			setUser(data);
+		} catch (error) {
+			console.error("Profile error:", error);
 
-      setUser(data);
-    } catch (error) {
-      console.error("Profile error:", error);
+			Alert.alert("Błąd połączenia", "Nie udało się połączyć z backendem.");
+		} finally {
+			setLoading(false);
+		}
+	};
 
-      Alert.alert("Błąd połączenia", "Nie udało się połączyć z backendem.");
-    } finally {
-      setLoading(false);
-    }
-  };
+	const handleLogout = async () => {
+		await SecureStore.deleteItemAsync("token");
 
-  const handleLogout = async () => {
-    await SecureStore.deleteItemAsync("token");
+		router.replace("/welcome");
+	};
 
-    router.replace("/welcome");
-  };
+	useEffect(() => {
+		fetchProfile();
+	}, []);
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+	if (loading) {
+		return (
+			<SafeAreaView style={styles.container}>
+				<View style={styles.loadingContainer}>
+					<ActivityIndicator size='large' />
+				</View>
+			</SafeAreaView>
+		);
+	}
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" />
-        </View>
-      </SafeAreaView>
-    );
-  }
+	if (!user) {
+		return (
+			<SafeAreaView style={styles.container}>
+				<View style={styles.loadingContainer}>
+					<Text>Nie udało się pobrać profilu.</Text>
+				</View>
+			</SafeAreaView>
+		);
+	}
 
-  if (!user) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text>Nie udało się pobrać profilu.</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+	return (
+		<SafeAreaView style={styles.container}>
+			<ScrollView
+				showsVerticalScrollIndicator={false}
+				contentContainerStyle={styles.scrollContent}>
+				<View style={styles.heroSection}>
+					<View style={styles.avatarWrapper}>
+						<Image
+							source={require("../../assets/images/undraw_friendly-guy-avatar_dqp5 (1).png")}
+							style={styles.avatar}
+						/>
+					</View>
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <View style={styles.heroSection}>
-          <View style={styles.avatarWrapper}>
-            <Image
-              source={require("../../assets/images/undraw_friendly-guy-avatar_dqp5 (1).png")}
-              style={styles.avatar}
-            />
-          </View>
+					<Text style={styles.fullName}>
+						{user.firstName} {user.lastName}
+					</Text>
 
-          <Text style={styles.username}>@{user.username}</Text>
+					{user.city ? <Text style={styles.location}>{user.city}</Text> : null}
 
-          <Text style={styles.description}>
-            {user.bio || "Brak opisu profilu."}
-          </Text>
+					<Text style={styles.description}>
+						{user.bio || "Brak opisu profilu."}
+					</Text>
 
-          <Pressable
-            style={styles.editButton}
-            onPress={() => router.push("/profilesettings")}
-          >
-            <Text style={styles.editButtonText}>Edytuj profil</Text>
-          </Pressable>
+					<Pressable
+						style={styles.editButton}
+						onPress={() => router.push("/profilesettings")}>
+						<Text style={styles.editButtonText}>Edytuj profil</Text>
+					</Pressable>
 
-          <Pressable style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutButtonText}>Wyloguj</Text>
-          </Pressable>
-        </View>
+					<Pressable style={styles.logoutButton} onPress={handleLogout}>
+						<Text style={styles.logoutButtonText}>Wyloguj</Text>
+					</Pressable>
+				</View>
 
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>12</Text>
-            <Text style={styles.statLabel}>Zleceń</Text>
-          </View>
+				<View style={styles.statsContainer}>
+					<View style={styles.statCard}>
+						<Text style={styles.statValue}>12</Text>
+						<Text style={styles.statLabel}>Zleceń</Text>
+					</View>
 
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>4.9</Text>
-            <Text style={styles.statLabel}>Ocena</Text>
-          </View>
+					<View style={styles.statCard}>
+						<Text style={styles.statValue}>4.9</Text>
+						<Text style={styles.statLabel}>Ocena</Text>
+					</View>
 
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>24</Text>
-            <Text style={styles.statLabel}>Opinie</Text>
-          </View>
-        </View>
+					<View style={styles.statCard}>
+						<Text style={styles.statValue}>24</Text>
+						<Text style={styles.statLabel}>Opinie</Text>
+					</View>
+				</View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>O mnie</Text>
+				<View style={styles.section}>
+					<Text style={styles.sectionTitle}>Dane kontaktowe</Text>
 
-          <View style={styles.infoCard}>
-            <Text style={styles.infoText}>
-              {user.bio || "Brak informacji o użytkowniku."}
-            </Text>
-          </View>
-        </View>
+					<View style={styles.infoCard}>
+						<Text style={styles.infoLabel}>E-mail</Text>
+						<Text style={styles.infoText}>{user.email}</Text>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Umiejętności</Text>
+						<Text style={styles.infoLabel}>Numer telefonu</Text>
+						<Text style={styles.infoText}>{user.phone}</Text>
 
-          <View style={styles.tagsContainer}>
-            {user.skills.length > 0 ? (
-              user.skills.map((skill) => (
-                <View key={skill} style={styles.tag}>
-                  <Text style={styles.tagText}>{skill}</Text>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.infoText}>Brak dodanych umiejętności.</Text>
-            )}
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
+						<Text style={styles.infoLabel}>Miejscowość</Text>
+						<Text style={styles.infoText}>{user.city || "Nie podano"}</Text>
+					</View>
+				</View>
+
+				<View style={styles.section}>
+					<Text style={styles.sectionTitle}>O mnie</Text>
+
+					<View style={styles.infoCard}>
+						<Text style={styles.infoText}>
+							{user.bio || "Brak informacji o użytkowniku."}
+						</Text>
+					</View>
+				</View>
+
+				<View style={styles.section}>
+					<Text style={styles.sectionTitle}>Umiejętności</Text>
+
+					<View style={styles.tagsContainer}>
+						{user.skills.length > 0 ? (
+							user.skills.map((skill) => (
+								<View key={skill} style={styles.tag}>
+									<Text style={styles.tagText}>{skill}</Text>
+								</View>
+							))
+						) : (
+							<Text style={styles.infoText}>Brak dodanych umiejętności.</Text>
+						)}
+					</View>
+				</View>
+			</ScrollView>
+		</SafeAreaView>
+	);
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F5F5FA",
-  },
+	container: {
+		flex: 1,
+		backgroundColor: "#F5F5FA",
+	},
 
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+	loadingContainer: {
+		flex: 1,
+		justifyContent: "center",
+		alignItems: "center",
+	},
 
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 30,
-  },
+	scrollContent: {
+		flexGrow: 1,
+		paddingHorizontal: 24,
+		paddingTop: 24,
+		paddingBottom: 30,
+	},
 
-  heroSection: {
-    alignItems: "center",
-    marginBottom: 32,
-  },
+	heroSection: {
+		alignItems: "center",
+		marginBottom: 32,
+	},
 
-  avatarWrapper: {
-    backgroundColor: "#ECEBFA",
-    borderRadius: 999,
-    padding: 18,
-    marginBottom: 20,
-  },
+	avatarWrapper: {
+		backgroundColor: "#ECEBFA",
+		borderRadius: 999,
+		padding: 18,
+		marginBottom: 20,
+	},
 
-  avatar: {
-    width: 150,
-    height: 150,
-  },
+	avatar: {
+		width: 150,
+		height: 150,
+	},
 
-  username: {
-    fontSize: 30,
-    fontWeight: "800",
-    color: "#1E2A5A",
-    marginBottom: 10,
-  },
+	fullName: {
+		fontSize: 30,
+		fontWeight: "800",
+		color: "#1E2A5A",
+		marginBottom: 6,
+		textAlign: "center",
+	},
 
-  description: {
-    fontSize: 15,
-    color: "#6B7280",
-    textAlign: "center",
-    lineHeight: 24,
-    paddingHorizontal: 12,
-  },
+	location: {
+		fontSize: 14,
+		color: "#6B7280",
+		marginBottom: 10,
+	},
 
-  editButton: {
-    marginTop: 20,
-    backgroundColor: "#4F7BFF",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 16,
-  },
+	description: {
+		fontSize: 15,
+		color: "#6B7280",
+		textAlign: "center",
+		lineHeight: 24,
+		paddingHorizontal: 12,
+	},
 
-  editButtonText: {
-    color: "white",
-    fontWeight: "700",
-    fontSize: 14,
-  },
+	editButton: {
+		marginTop: 20,
+		backgroundColor: "#4F7BFF",
+		paddingHorizontal: 24,
+		paddingVertical: 14,
+		borderRadius: 16,
+	},
 
-  logoutButton: {
-    marginTop: 12,
-    backgroundColor: "white",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
+	editButtonText: {
+		color: "white",
+		fontWeight: "700",
+		fontSize: 14,
+	},
 
-  logoutButtonText: {
-    color: "#EF4444",
-    fontWeight: "700",
-    fontSize: 14,
-  },
+	logoutButton: {
+		marginTop: 12,
+		backgroundColor: "white",
+		paddingHorizontal: 24,
+		paddingVertical: 14,
+		borderRadius: 16,
+		borderWidth: 1,
+		borderColor: "#E5E7EB",
+	},
 
-  statsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 32,
-  },
+	logoutButtonText: {
+		color: "#EF4444",
+		fontWeight: "700",
+		fontSize: 14,
+	},
 
-  statCard: {
-    flex: 1,
-    backgroundColor: "white",
-    borderRadius: 20,
-    paddingVertical: 22,
-    alignItems: "center",
-  },
+	statsContainer: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		gap: 12,
+		marginBottom: 32,
+	},
 
-  statValue: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#4F7BFF",
-    marginBottom: 6,
-  },
+	statCard: {
+		flex: 1,
+		backgroundColor: "white",
+		borderRadius: 20,
+		paddingVertical: 22,
+		alignItems: "center",
+	},
 
-  statLabel: {
-    fontSize: 13,
-    color: "#6B7280",
-    fontWeight: "600",
-  },
+	statValue: {
+		fontSize: 24,
+		fontWeight: "800",
+		color: "#4F7BFF",
+		marginBottom: 6,
+	},
 
-  section: {
-    marginBottom: 28,
-  },
+	statLabel: {
+		fontSize: 13,
+		color: "#6B7280",
+		fontWeight: "600",
+	},
 
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1E2A5A",
-    marginBottom: 14,
-  },
+	section: {
+		marginBottom: 28,
+	},
 
-  infoCard: {
-    backgroundColor: "white",
-    borderRadius: 20,
-    padding: 20,
-  },
+	sectionTitle: {
+		fontSize: 20,
+		fontWeight: "700",
+		color: "#1E2A5A",
+		marginBottom: 14,
+	},
 
-  infoText: {
-    color: "#4B5563",
-    fontSize: 15,
-    lineHeight: 24,
-  },
+	infoCard: {
+		backgroundColor: "white",
+		borderRadius: 20,
+		padding: 20,
+	},
 
-  tagsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
+	infoLabel: {
+		color: "#9CA3AF",
+		fontSize: 12,
+		fontWeight: "600",
+		marginBottom: 4,
+		marginTop: 12,
+	},
 
-  tag: {
-    backgroundColor: "#ECEBFA",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 999,
-  },
+	infoText: {
+		color: "#4B5563",
+		fontSize: 15,
+		lineHeight: 24,
+	},
 
-  tagText: {
-    color: "#4F7BFF",
-    fontWeight: "600",
-    fontSize: 13,
-  },
+	tagsContainer: {
+		flexDirection: "row",
+		flexWrap: "wrap",
+		gap: 10,
+	},
+
+	tag: {
+		backgroundColor: "#ECEBFA",
+		paddingHorizontal: 16,
+		paddingVertical: 12,
+		borderRadius: 999,
+	},
+
+	tagText: {
+		color: "#4F7BFF",
+		fontWeight: "600",
+		fontSize: 13,
+	},
 });
