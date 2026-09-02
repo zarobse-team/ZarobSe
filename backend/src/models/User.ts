@@ -22,12 +22,14 @@ const UserSchema = new Schema<IUser>(
 			type: String,
 			required: true,
 			trim: true,
+			maxlength: 50,
 		},
 
 		lastName: {
 			type: String,
 			required: true,
 			trim: true,
+			maxlength: 50,
 		},
 
 		email: {
@@ -42,6 +44,7 @@ const UserSchema = new Schema<IUser>(
 			type: String,
 			required: true,
 			trim: true,
+			maxlength: 20,
 		},
 
 		password: {
@@ -53,21 +56,35 @@ const UserSchema = new Schema<IUser>(
 			type: String,
 			default: "",
 			trim: true,
+			maxlength: 80,
 		},
 
 		bio: {
 			type: String,
 			default: "",
+			trim: true,
+			maxlength: 300,
 		},
 
 		avatar: {
 			type: String,
 			default: "",
+			trim: true,
 		},
 
 		skills: {
-			type: [String],
+			type: [
+				{
+					type: String,
+					trim: true,
+					maxlength: 30,
+				},
+			],
 			default: [],
+			validate: {
+				validator: (skills: string[]) => skills.length <= 10,
+				message: "Możesz dodać maksymalnie 10 umiejętności.",
+			},
 		},
 
 		role: {

@@ -1,6 +1,6 @@
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
 	ActivityIndicator,
 	Alert,
@@ -12,6 +12,7 @@ import {
 	View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
 import { API_URL } from "../../constants/api";
 
 type UserProfile = {
@@ -32,6 +33,8 @@ export default function ProfileScreen() {
 
 	const fetchProfile = async () => {
 		try {
+			setLoading(true);
+
 			const token = await SecureStore.getItemAsync("token");
 
 			if (!token) {
@@ -65,13 +68,14 @@ export default function ProfileScreen() {
 
 	const handleLogout = async () => {
 		await SecureStore.deleteItemAsync("token");
-
 		router.replace("/welcome");
 	};
 
-	useEffect(() => {
-		fetchProfile();
-	}, []);
+	useFocusEffect(
+		useCallback(() => {
+			fetchProfile();
+		}, []),
+	);
 
 	if (loading) {
 		return (
@@ -101,7 +105,11 @@ export default function ProfileScreen() {
 				<View style={styles.heroSection}>
 					<View style={styles.avatarWrapper}>
 						<Image
-							source={require("../../assets/images/undraw_friendly-guy-avatar_dqp5 (1).png")}
+							source={
+								user.avatar
+									? { uri: user.avatar }
+									: require("../../assets/images/undraw_friendly-guy-avatar_dqp5 (1).png")
+							}
 							style={styles.avatar}
 						/>
 					</View>
@@ -112,51 +120,11 @@ export default function ProfileScreen() {
 
 					{user.city ? <Text style={styles.location}>{user.city}</Text> : null}
 
-					<Text style={styles.description}>
-						{user.bio || "Brak opisu profilu."}
-					</Text>
-
 					<Pressable
 						style={styles.editButton}
 						onPress={() => router.push("/profilesettings")}>
 						<Text style={styles.editButtonText}>Edytuj profil</Text>
 					</Pressable>
-
-					<Pressable style={styles.logoutButton} onPress={handleLogout}>
-						<Text style={styles.logoutButtonText}>Wyloguj</Text>
-					</Pressable>
-				</View>
-
-				<View style={styles.statsContainer}>
-					<View style={styles.statCard}>
-						<Text style={styles.statValue}>12</Text>
-						<Text style={styles.statLabel}>Zleceń</Text>
-					</View>
-
-					<View style={styles.statCard}>
-						<Text style={styles.statValue}>4.9</Text>
-						<Text style={styles.statLabel}>Ocena</Text>
-					</View>
-
-					<View style={styles.statCard}>
-						<Text style={styles.statValue}>24</Text>
-						<Text style={styles.statLabel}>Opinie</Text>
-					</View>
-				</View>
-
-				<View style={styles.section}>
-					<Text style={styles.sectionTitle}>Dane kontaktowe</Text>
-
-					<View style={styles.infoCard}>
-						<Text style={styles.infoLabel}>E-mail</Text>
-						<Text style={styles.infoText}>{user.email}</Text>
-
-						<Text style={styles.infoLabel}>Numer telefonu</Text>
-						<Text style={styles.infoText}>{user.phone}</Text>
-
-						<Text style={styles.infoLabel}>Miejscowość</Text>
-						<Text style={styles.infoText}>{user.city || "Nie podano"}</Text>
-					</View>
 				</View>
 
 				<View style={styles.section}>
@@ -170,20 +138,54 @@ export default function ProfileScreen() {
 				</View>
 
 				<View style={styles.section}>
+					<Text style={styles.sectionTitle}>Dane kontaktowe</Text>
+
+					<View style={styles.infoCard}>
+						<View style={styles.infoRow}>
+							<Text style={styles.infoLabel}>E-mail</Text>
+
+							<Text style={styles.infoText}>{user.email}</Text>
+						</View>
+
+						<View style={styles.divider} />
+
+						<View style={styles.infoRow}>
+							<Text style={styles.infoLabel}>Numer telefonu</Text>
+
+							<Text style={styles.infoText}>{user.phone}</Text>
+						</View>
+
+						<View style={styles.divider} />
+
+						<View style={styles.infoRow}>
+							<Text style={styles.infoLabel}>Miejscowość</Text>
+
+							<Text style={styles.infoText}>{user.city || "Nie podano"}</Text>
+						</View>
+					</View>
+				</View>
+
+				<View style={styles.section}>
 					<Text style={styles.sectionTitle}>Umiejętności</Text>
 
-					<View style={styles.tagsContainer}>
-						{user.skills.length > 0 ? (
-							user.skills.map((skill) => (
-								<View key={skill} style={styles.tag}>
-									<Text style={styles.tagText}>{skill}</Text>
-								</View>
-							))
+					<View style={styles.infoCard}>
+						{user.skills && user.skills.length > 0 ? (
+							<View style={styles.tagsContainer}>
+								{user.skills.map((skill, index) => (
+									<View key={`${skill}-${index}`} style={styles.tag}>
+										<Text style={styles.tagText}>{skill}</Text>
+									</View>
+								))}
+							</View>
 						) : (
 							<Text style={styles.infoText}>Brak dodanych umiejętności.</Text>
 						)}
 					</View>
 				</View>
+
+				<Pressable style={styles.logoutButton} onPress={handleLogout}>
+					<Text style={styles.logoutButtonText}>Wyloguj</Text>
+				</Pressable>
 			</ScrollView>
 		</SafeAreaView>
 	);
@@ -202,138 +204,94 @@ const styles = StyleSheet.create({
 	},
 
 	scrollContent: {
-		flexGrow: 1,
 		paddingHorizontal: 24,
-		paddingTop: 24,
-		paddingBottom: 30,
+		paddingTop: 28,
+		paddingBottom: 40,
 	},
 
 	heroSection: {
 		alignItems: "center",
-		marginBottom: 32,
+		marginBottom: 34,
 	},
 
 	avatarWrapper: {
 		backgroundColor: "#ECEBFA",
 		borderRadius: 999,
-		padding: 18,
-		marginBottom: 20,
+		padding: 5,
+		marginBottom: 16,
 	},
 
 	avatar: {
-		width: 150,
-		height: 150,
+		width: 140,
+		height: 140,
+		borderRadius: 70,
 	},
 
 	fullName: {
-		fontSize: 30,
+		fontSize: 28,
 		fontWeight: "800",
 		color: "#1E2A5A",
-		marginBottom: 6,
 		textAlign: "center",
 	},
 
 	location: {
-		fontSize: 14,
-		color: "#6B7280",
-		marginBottom: 10,
-	},
-
-	description: {
 		fontSize: 15,
 		color: "#6B7280",
-		textAlign: "center",
-		lineHeight: 24,
-		paddingHorizontal: 12,
+		marginTop: 6,
+		marginBottom: 18,
 	},
 
 	editButton: {
-		marginTop: 20,
 		backgroundColor: "#4F7BFF",
-		paddingHorizontal: 24,
-		paddingVertical: 14,
+		paddingHorizontal: 26,
+		paddingVertical: 13,
 		borderRadius: 16,
+		marginTop: 18,
 	},
 
 	editButtonText: {
 		color: "white",
+		fontSize: 15,
 		fontWeight: "700",
-		fontSize: 14,
-	},
-
-	logoutButton: {
-		marginTop: 12,
-		backgroundColor: "white",
-		paddingHorizontal: 24,
-		paddingVertical: 14,
-		borderRadius: 16,
-		borderWidth: 1,
-		borderColor: "#E5E7EB",
-	},
-
-	logoutButtonText: {
-		color: "#EF4444",
-		fontWeight: "700",
-		fontSize: 14,
-	},
-
-	statsContainer: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-		gap: 12,
-		marginBottom: 32,
-	},
-
-	statCard: {
-		flex: 1,
-		backgroundColor: "white",
-		borderRadius: 20,
-		paddingVertical: 22,
-		alignItems: "center",
-	},
-
-	statValue: {
-		fontSize: 24,
-		fontWeight: "800",
-		color: "#4F7BFF",
-		marginBottom: 6,
-	},
-
-	statLabel: {
-		fontSize: 13,
-		color: "#6B7280",
-		fontWeight: "600",
 	},
 
 	section: {
-		marginBottom: 28,
+		marginBottom: 26,
 	},
 
 	sectionTitle: {
 		fontSize: 20,
 		fontWeight: "700",
 		color: "#1E2A5A",
-		marginBottom: 14,
+		marginBottom: 12,
 	},
 
 	infoCard: {
 		backgroundColor: "white",
 		borderRadius: 20,
-		padding: 20,
+		padding: 18,
+	},
+
+	infoRow: {
+		gap: 4,
 	},
 
 	infoLabel: {
-		color: "#9CA3AF",
-		fontSize: 12,
+		fontSize: 13,
 		fontWeight: "600",
-		marginBottom: 4,
-		marginTop: 12,
+		color: "#6B7280",
 	},
 
 	infoText: {
-		color: "#4B5563",
-		fontSize: 15,
-		lineHeight: 24,
+		fontSize: 16,
+		color: "#1F2937",
+		lineHeight: 23,
+	},
+
+	divider: {
+		height: 1,
+		backgroundColor: "#EEEEF3",
+		marginVertical: 15,
 	},
 
 	tagsContainer: {
@@ -344,14 +302,29 @@ const styles = StyleSheet.create({
 
 	tag: {
 		backgroundColor: "#ECEBFA",
-		paddingHorizontal: 16,
-		paddingVertical: 12,
+		paddingHorizontal: 14,
+		paddingVertical: 9,
 		borderRadius: 999,
 	},
 
 	tagText: {
-		color: "#4F7BFF",
+		color: "#4F5DA8",
 		fontWeight: "600",
-		fontSize: 13,
+		fontSize: 14,
+	},
+
+	logoutButton: {
+		borderWidth: 1,
+		borderColor: "#EF4444",
+		paddingVertical: 16,
+		borderRadius: 18,
+		alignItems: "center",
+		marginTop: 6,
+	},
+
+	logoutButtonText: {
+		color: "#EF4444",
+		fontWeight: "700",
+		fontSize: 16,
 	},
 });

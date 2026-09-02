@@ -5,6 +5,13 @@ import jwt from "jsonwebtoken";
 import { AuthRequest } from "../middleware/auth.middleware";
 import User from "../models/User";
 
+const phoneRegex = /^\+?[0-9]{9,15}$/;
+
+const isValidPhone = (phone: string): boolean => {
+	const normalizedPhone = phone.replace(/[\s()-]/g, "");
+	return phoneRegex.test(normalizedPhone);
+};
+
 export const register = async (req: Request, res: Response) => {
 	try {
 		const { firstName, lastName, email, phone, password } = req.body;
@@ -15,7 +22,32 @@ export const register = async (req: Request, res: Response) => {
 			});
 		}
 
-		const existingUser = await User.findOne({ email });
+		const trimmedFirstName = String(firstName).trim();
+		const trimmedLastName = String(lastName).trim();
+		const trimmedEmail = String(email).trim().toLowerCase();
+		const trimmedPhone = String(phone).trim();
+
+		if (trimmedFirstName.length > 50) {
+			return res.status(400).json({
+				message: "Imię może mieć maksymalnie 50 znaków.",
+			});
+		}
+
+		if (trimmedLastName.length > 50) {
+			return res.status(400).json({
+				message: "Nazwisko może mieć maksymalnie 50 znaków.",
+			});
+		}
+
+		if (!isValidPhone(trimmedPhone)) {
+			return res.status(400).json({
+				message: "Podaj poprawny numer telefonu.",
+			});
+		}
+
+		const existingUser = await User.findOne({
+			email: trimmedEmail,
+		});
 
 		if (existingUser) {
 			return res.status(400).json({
@@ -26,10 +58,10 @@ export const register = async (req: Request, res: Response) => {
 		const hashedPassword = await bcrypt.hash(password, 10);
 
 		const user = await User.create({
-			firstName,
-			lastName,
-			email,
-			phone,
+			firstName: trimmedFirstName,
+			lastName: trimmedLastName,
+			email: trimmedEmail,
+			phone: trimmedPhone,
 			password: hashedPassword,
 		});
 
@@ -64,7 +96,11 @@ export const login = async (req: Request, res: Response) => {
 			});
 		}
 
-		const user = await User.findOne({ email });
+		const normalizedEmail = String(email).trim().toLowerCase();
+
+		const user = await User.findOne({
+			email: normalizedEmail,
+		});
 
 		if (!user) {
 			return res.status(401).json({
@@ -142,19 +178,129 @@ export const updateMe = async (req: AuthRequest, res: Response) => {
 			});
 		}
 
-		if (firstName !== undefined) user.firstName = firstName;
-		if (lastName !== undefined) user.lastName = lastName;
-		if (phone !== undefined) user.phone = phone;
-		if (city !== undefined) user.city = city;
-		if (bio !== undefined) user.bio = bio;
-		if (avatar !== undefined) user.avatar = avatar;
-		if (skills !== undefined) user.skills = skills;
+		if (firstName !== undefined) {
+			const value = String(firstName).trim();
+
+			if (!value) {
+				return res.status(400).json({
+					message: "Imię nie może być puste.",
+				});
+			}
+
+			if (value.length > 50) {
+				return res.status(400).json({
+					message: "Imię może mieć maksymalnie 50 znaków.",
+				});
+			}
+
+			user.firstName = value;
+		}
+
+		if (lastName !== undefined) {
+			const value = String(lastName).trim();
+
+			if (!value) {
+				return res.status(400).json({
+					message: "Nazwisko nie może być puste.",
+				});
+			}
+
+			if (value.length > 50) {
+				return res.status(400).json({
+					message: "Nazwisko może mieć maksymalnie 50 znaków.",
+				});
+			}
+
+			user.lastName = value;
+		}
+
+		if (phone !== undefined) {
+			const value = String(phone).trim();
+
+			if (!isValidPhone(value)) {
+				return res.status(400).json({
+					message: "Podaj poprawny numer telefonu.",
+				});
+			}
+
+			user.phone = value;
+		}
+
+		if (city !== undefined) {
+			const value = String(city).trim();
+
+			if (value.length > 80) {
+				return res.status(400).json({
+					message: "Miejscowość może mieć maksymalnie 80 znaków.",
+				});
+			}
+
+			user.city = value;
+		}
+
+		if (bio !== undefined) {
+			const value = String(bio).trim();
+
+			if (value.length > 300) {
+				return res.status(400).json({
+					message: "Opis profilu może mieć maksymalnie 300 znaków.",
+				});
+			}
+
+			user.bio = value;
+		}
+
+		if (avatar !== undefined) {
+			if (typeof avatar !== "string") {
+				return res.status(400).json({
+					message: "Nieprawidłowe zdjęcie profilowe.",
+				});
+			}
+
+			user.avatar = avatar.trim();
+		}
+
+		if (skills !== undefined) {
+			if (!Array.isArray(skills)) {
+				return res.status(400).json({
+					message: "Umiejętności muszą być tablicą.",
+				});
+			}
+
+			if (skills.length > 10) {
+				return res.status(400).json({
+					message: "Możesz dodać maksymalnie 10 umiejętności.",
+				});
+			}
+
+			const cleanedSkills = skills
+				.map((skill) => String(skill).trim())
+				.filter((skill) => skill.length > 0);
+
+			const hasTooLongSkill = cleanedSkills.some((skill) => skill.length > 30);
+
+			if (hasTooLongSkill) {
+				return res.status(400).json({
+					message: "Jedna umiejętność może mieć maksymalnie 30 znaków.",
+				});
+			}
+
+			const uniqueSkills = [
+				...new Map(
+					cleanedSkills.map((skill) => [skill.toLowerCase(), skill]),
+				).values(),
+			];
+
+			user.skills = uniqueSkills;
+		}
 
 		await user.save();
 
+		const updatedUser = await User.findById(user._id).select("-password");
+
 		return res.status(200).json({
 			message: "Profil został zaktualizowany.",
-			user,
+			user: updatedUser,
 		});
 	} catch (error) {
 		console.error(error);
