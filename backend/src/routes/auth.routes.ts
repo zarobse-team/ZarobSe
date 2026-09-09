@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  changePassword,
   getMe,
   login,
   register,
@@ -11,6 +12,7 @@ const router = Router();
 
 router.get("/me", authMiddleware, getMe);
 router.patch("/me", authMiddleware, updateMe);
+router.patch("/change-password", authMiddleware, changePassword);
 
 router.post("/register", register);
 router.post("/login", login);
