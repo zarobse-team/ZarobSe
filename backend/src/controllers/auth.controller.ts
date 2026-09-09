@@ -26,6 +26,19 @@ export const register = async (req: Request, res: Response) => {
     const trimmedLastName = String(lastName).trim();
     const trimmedEmail = String(email).trim().toLowerCase();
     const trimmedPhone = String(phone).trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(trimmedEmail)) {
+      return res.status(400).json({
+        message: "Podaj poprawny adres email.",
+      });
+    }
+
+    if (String(password).length < 8) {
+      return res.status(400).json({
+        message: "Hasło musi mieć co najmniej 8 znaków.",
+      });
+    }
 
     if (trimmedFirstName.length > 50) {
       return res.status(400).json({
