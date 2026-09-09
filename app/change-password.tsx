@@ -58,7 +58,15 @@ export default function ChangePasswordScreen() {
         }),
       });
 
-      const data = await response.json();
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {
+          message: "Serwer zwrócił nieprawidłową odpowiedź.",
+        };
+      }
 
       if (!response.ok) {
         Alert.alert("Błąd", data.message || "Nie udało się zmienić hasła.");
