@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -35,26 +35,101 @@ type Job = {
   updatedAt: string;
 };
 
+type CurrentUser = {
+  _id: string;
+};
+
+const statusLabels: Record<string, string> = {
+  open: "Otwarte",
+  assigned: "Przydzielone",
+  in_progress: "W trakcie",
+  completed: "Zakończone",
+  cancelled: "Anulowane",
+};
+
 export default function JobDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [job, setJob] = useState<Job | null>(null);
+  const [currentUserId, setCurrentUserId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  const fetchJob = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
 
       const token = await SecureStore.getItemAsync("token");
 
       if (!token) {
-        Alert.alert("Błąd", "Musisz być zalogowany.");
+        router.replace("/login");
+        return;
+      }
+
+      const [jobResponse, userResponse] = await Promise.all([
+        fetch(`${API_URL}/api/jobs/${id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+        fetch(`${API_URL}/api/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+      ]);
+
+      const jobData = await jobResponse.json();
+      const userData = (await userResponse.json()) as CurrentUser;
+
+      if (!jobResponse.ok) {
+        Alert.alert(
+          "Błąd",
+          jobData.message || "Nie udało się pobrać zlecenia.",
+        );
+        return;
+      }
+
+      if (!userResponse.ok) {
+        Alert.alert("Błąd", "Nie udało się pobrać danych użytkownika.");
+        return;
+      }
+
+      setJob(jobData);
+      setCurrentUserId(userData._id);
+    } catch (error) {
+      console.error("Job details error:", error);
+
+      Alert.alert("Błąd połączenia", "Nie udało się połączyć z backendem.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (id) {
+        fetchData();
+      }
+
+      setMenuVisible(false);
+    }, [id]),
+  );
+
+  const deleteJob = async () => {
+    try {
+      setDeleting(true);
+
+      const token = await SecureStore.getItemAsync("token");
+
+      if (!token) {
         router.replace("/login");
         return;
       }
 
       const response = await fetch(`${API_URL}/api/jobs/${id}`, {
-        method: "GET",
+        method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -65,29 +140,48 @@ export default function JobDetailsScreen() {
       try {
         data = await response.json();
       } catch {
-        data = null;
+        data = {};
       }
 
       if (!response.ok) {
-        Alert.alert("Błąd", data?.message || "Nie udało się pobrać zlecenia.");
+        Alert.alert("Błąd", data.message || "Nie udało się usunąć zlecenia.");
         return;
       }
 
-      setJob(data);
+      Alert.alert("Gotowe", "Zlecenie zostało usunięte.", [
+        {
+          text: "OK",
+          onPress: () => router.replace("/(tabs)/my-jobs"),
+        },
+      ]);
     } catch (error) {
-      console.error("Job details error:", error);
+      console.error("Delete job error:", error);
 
-      Alert.alert("Błąd połączenia", "Nie udało się połączyć z backendem.");
+      Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
     } finally {
-      setLoading(false);
+      setDeleting(false);
     }
   };
 
-  useEffect(() => {
-    if (id) {
-      fetchJob();
-    }
-  }, [id]);
+  const handleDelete = () => {
+    setMenuVisible(false);
+
+    Alert.alert(
+      "Usuń zlecenie",
+      "Czy na pewno chcesz usunąć to zlecenie? Tej operacji nie można cofnąć.",
+      [
+        {
+          text: "Anuluj",
+          style: "cancel",
+        },
+        {
+          text: "Usuń",
+          style: "destructive",
+          onPress: deleteJob,
+        },
+      ],
+    );
+  };
 
   if (loading) {
     return (
@@ -109,17 +203,68 @@ export default function JobDetailsScreen() {
     );
   }
 
+  const isOwner = job.author?._id === currentUserId;
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#1E2A5A" />
+        <View style={styles.headerRow}>
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="#1E2A5A" />
 
-          <Text style={styles.backText}>Wróć</Text>
-        </Pressable>
+            <Text style={styles.backText}>Wróć</Text>
+          </Pressable>
+
+          {isOwner && (
+            <View style={styles.menuWrapper}>
+              <Pressable
+                style={styles.menuButton}
+                onPress={() => setMenuVisible((current) => !current)}
+              >
+                <Ionicons
+                  name="ellipsis-horizontal"
+                  size={26}
+                  color="#1E2A5A"
+                />
+              </Pressable>
+
+              {menuVisible && (
+                <View style={styles.dropdownMenu}>
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      setMenuVisible(false);
+
+                      router.push({
+                        pathname: "/job/edit/[id]",
+                        params: { id: job._id },
+                      });
+                    }}
+                  >
+                    <Ionicons name="create-outline" size={20} color="#1F2937" />
+
+                    <Text style={styles.menuItemText}>Edytuj</Text>
+                  </Pressable>
+
+                  <View style={styles.menuDivider} />
+
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={handleDelete}
+                    disabled={deleting}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#DC2626" />
+
+                    <Text style={styles.deleteMenuText}>Usuń</Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
 
         <View style={styles.topRow}>
           <View style={styles.categoryBadge}>
@@ -131,10 +276,18 @@ export default function JobDetailsScreen() {
 
         <Text style={styles.title}>{job.title}</Text>
 
-        <View style={styles.locationRow}>
-          <Ionicons name="location-outline" size={18} color="#64748B" />
+        <View style={styles.metaRow}>
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={18} color="#64748B" />
 
-          <Text style={styles.location}>{job.city}</Text>
+            <Text style={styles.location}>{job.city}</Text>
+          </View>
+
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>
+              {statusLabels[job.status] ?? job.status}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -148,7 +301,15 @@ export default function JobDetailsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Zleceniodawca</Text>
 
-          <View style={styles.authorCard}>
+          <Pressable
+            style={styles.authorCard}
+            onPress={() =>
+              router.push({
+                pathname: "/user/[id]",
+                params: { id: job.author._id },
+              })
+            }
+          >
             {job.author?.avatar ? (
               <Image
                 source={{ uri: job.author.avatar }}
@@ -169,20 +330,22 @@ export default function JobDetailsScreen() {
                 <Text style={styles.authorCity}>{job.author.city}</Text>
               ) : null}
             </View>
-          </View>
+          </Pressable>
         </View>
 
-        <Pressable
-          style={styles.applyButton}
-          onPress={() =>
-            Alert.alert(
-              "Jeszcze chwila",
-              "Zgłaszanie się do zlecenia dodamy w kolejnym kroku.",
-            )
-          }
-        >
-          <Text style={styles.applyButtonText}>Zgłoś się do zlecenia</Text>
-        </Pressable>
+        {!isOwner && (
+          <Pressable
+            style={styles.applyButton}
+            onPress={() =>
+              Alert.alert(
+                "Jeszcze chwila",
+                "System zgłoszeń dodamy w kolejnym etapie.",
+              )
+            }
+          >
+            <Text style={styles.applyButtonText}>Zgłoś się do zlecenia</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -206,17 +369,78 @@ const styles = StyleSheet.create({
     paddingBottom: 60,
   },
 
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
+    zIndex: 10,
+  },
+
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 24,
   },
 
   backText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#1E2A5A",
+  },
+
+  menuWrapper: {
+    position: "relative",
+    zIndex: 20,
+  },
+
+  menuButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  dropdownMenu: {
+    position: "absolute",
+    top: 48,
+    right: 0,
+    width: 150,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingVertical: 6,
+    zIndex: 100,
+  },
+
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1F2937",
+  },
+
+  deleteMenuText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#DC2626",
+  },
+
+  menuDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
   },
 
   topRow: {
@@ -251,17 +475,36 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
 
+  metaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 12,
+  },
+
   locationRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    marginTop: 10,
   },
 
   location: {
     fontSize: 15,
     color: "#64748B",
     fontWeight: "600",
+  },
+
+  statusBadge: {
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  statusText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#2563EB",
   },
 
   section: {
