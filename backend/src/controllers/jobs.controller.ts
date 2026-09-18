@@ -45,9 +45,13 @@ export const createJob = async (req: AuthRequest, res: Response) => {
 
 export const getJobs = async (_req: AuthRequest, res: Response) => {
   try {
-    const jobs = await Job.find()
+    const jobs = await Job.find({
+      status: "open",
+    })
       .populate("author", "firstName lastName avatar city")
-      .sort({ createdAt: -1 });
+      .sort({
+        createdAt: -1,
+      });
 
     return res.status(200).json(jobs);
   } catch (error) {
@@ -61,10 +65,9 @@ export const getJobs = async (_req: AuthRequest, res: Response) => {
 
 export const getJobById = async (req: AuthRequest, res: Response) => {
   try {
-    const job = await Job.findById(req.params.id).populate(
-      "author",
-      "firstName lastName avatar city",
-    );
+    const job = await Job.findById(req.params.id)
+      .populate("author", "firstName lastName avatar city")
+      .populate("assignedTo", "firstName lastName avatar city");
 
     if (!job) {
       return res.status(404).json({
@@ -88,7 +91,10 @@ export const getMyJobs = async (req: AuthRequest, res: Response) => {
       author: req.userId,
     })
       .populate("author", "firstName lastName avatar city")
-      .sort({ createdAt: -1 });
+      .populate("assignedTo", "firstName lastName avatar city")
+      .sort({
+        createdAt: -1,
+      });
 
     return res.status(200).json(jobs);
   } catch (error) {

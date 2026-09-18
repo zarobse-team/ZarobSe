@@ -26,10 +26,39 @@ type Job = {
   createdAt: string;
 };
 
+type Application = {
+  _id: string;
+  status: "pending" | "accepted" | "rejected";
+  createdAt: string;
+  job: {
+    _id: string;
+    title: string;
+    description: string;
+    category: string;
+    city: string;
+    budget: number;
+    status: string;
+    author: {
+      _id: string;
+      firstName: string;
+      lastName: string;
+      avatar?: string;
+      city?: string;
+    };
+  };
+};
+
 type ActiveTab = "posted" | "applied";
+
+const applicationStatusLabels: Record<string, string> = {
+  pending: "Oczekuje",
+  accepted: "Zaakceptowano",
+  rejected: "Odrzucono",
+};
 
 export default function MyJobsScreen() {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>("posted");
 
@@ -44,30 +73,41 @@ export default function MyJobsScreen() {
         return;
       }
 
-      const response = await fetch(`${API_URL}/api/jobs/my`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const [jobsResponse, applicationsResponse] = await Promise.all([
+        fetch(`${API_URL}/api/jobs/my`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
 
-      let data;
+        fetch(`${API_URL}/api/jobs/applications/my`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+      ]);
 
-      try {
-        data = await response.json();
-      } catch {
-        data = [];
-      }
+      const jobsData = await jobsResponse.json();
+      const applicationsData = await applicationsResponse.json();
 
-      if (!response.ok) {
+      if (!jobsResponse.ok) {
         Alert.alert(
           "Błąd",
-          data.message || "Nie udało się pobrać Twoich zleceń.",
+          jobsData.message || "Nie udało się pobrać Twoich zleceń.",
         );
         return;
       }
 
-      setJobs(data);
+      if (!applicationsResponse.ok) {
+        Alert.alert(
+          "Błąd",
+          applicationsData.message || "Nie udało się pobrać Twoich zgłoszeń.",
+        );
+        return;
+      }
+
+      setJobs(jobsData);
+      setApplications(applicationsData);
     } catch (error) {
       console.error("My jobs fetch error:", error);
 
@@ -195,19 +235,71 @@ export default function MyJobsScreen() {
           )}
         </ScrollView>
       ) : (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="hand-left-outline" size={48} color="#94A3B8" />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.list}
+        >
+          {applications.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="hand-left-outline" size={48} color="#94A3B8" />
 
-          <Text style={styles.emptyTitle}>Brak zgłoszeń</Text>
+              <Text style={styles.emptyTitle}>Brak zgłoszeń</Text>
 
-          <Text style={styles.emptyText}>
-            Nie zgłosiłeś się jeszcze do żadnego zlecenia.
-          </Text>
+              <Text style={styles.emptyText}>
+                Nie zgłosiłeś się jeszcze do żadnego zlecenia.
+              </Text>
+            </View>
+          ) : (
+            applications.map((application) => (
+              <TouchableOpacity
+                key={application._id}
+                style={styles.jobCard}
+                activeOpacity={0.85}
+                onPress={() =>
+                  router.push({
+                    pathname: "/job/[id]",
+                    params: { id: application.job._id },
+                  })
+                }
+              >
+                <View style={styles.topRow}>
+                  <View style={styles.categoryBadge}>
+                    <Text style={styles.categoryText}>
+                      {application.job.category}
+                    </Text>
+                  </View>
 
-          <Text style={styles.placeholderText}>
-            Ta sekcja zacznie działać po dodaniu systemu zgłoszeń.
-          </Text>
-        </View>
+                  <Text style={styles.price}>{application.job.budget} zł</Text>
+                </View>
+
+                <Text style={styles.jobTitle}>{application.job.title}</Text>
+
+                <Text style={styles.description} numberOfLines={2}>
+                  {application.job.description}
+                </Text>
+
+                <View style={styles.bottomRow}>
+                  <View style={styles.locationRow}>
+                    <Ionicons
+                      name="location-outline"
+                      size={17}
+                      color="#64748B"
+                    />
+
+                    <Text style={styles.location}>{application.job.city}</Text>
+                  </View>
+
+                  <View style={styles.applicationStatusBadge}>
+                    <Text style={styles.applicationStatusText}>
+                      {applicationStatusLabels[application.status] ??
+                        application.status}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
       )}
     </View>
   );
@@ -297,14 +389,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  placeholderText: {
-    marginTop: 12,
-    fontSize: 12,
-    color: "#94A3B8",
-    textAlign: "center",
-    lineHeight: 18,
-  },
-
   jobCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 22,
@@ -374,6 +458,19 @@ const styles = StyleSheet.create({
   detailsText: {
     fontSize: 14,
     fontWeight: "800",
+    color: "#2563EB",
+  },
+
+  applicationStatusBadge: {
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  applicationStatusText: {
+    fontSize: 12,
+    fontWeight: "700",
     color: "#2563EB",
   },
 });

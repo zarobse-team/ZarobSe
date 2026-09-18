@@ -39,6 +39,27 @@ type CurrentUser = {
   _id: string;
 };
 
+type ApplicationResponse = {
+  applied: boolean;
+  application: {
+    _id: string;
+    status: "pending" | "accepted" | "rejected";
+  } | null;
+};
+
+type JobApplication = {
+  _id: string;
+  status: "pending" | "accepted" | "rejected";
+  applicant: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    avatar?: string;
+    city?: string;
+    bio?: string;
+  };
+};
+
 const statusLabels: Record<string, string> = {
   open: "Otwarte",
   assigned: "Przydzielone",
@@ -47,14 +68,35 @@ const statusLabels: Record<string, string> = {
   cancelled: "Anulowane",
 };
 
+const applicationStatusLabels: Record<string, string> = {
+  pending: "Oczekuje",
+  accepted: "Zaakceptowano",
+  rejected: "Odrzucono",
+};
+
 export default function JobDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [job, setJob] = useState<Job | null>(null);
   const [currentUserId, setCurrentUserId] = useState("");
   const [loading, setLoading] = useState(true);
+
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const [applying, setApplying] = useState(false);
+  const [hasApplied, setHasApplied] = useState(false);
+  const [applicationStatus, setApplicationStatus] = useState<string | null>(
+    null,
+  );
+
+  const [withdrawing, setWithdrawing] = useState(false);
+
+  const [applications, setApplications] = useState<JobApplication[]>([]);
+
+  const [acceptingApplicationId, setAcceptingApplicationId] = useState<
+    string | null
+  >(null);
 
   const fetchData = async () => {
     try {
@@ -98,6 +140,48 @@ export default function JobDetailsScreen() {
 
       setJob(jobData);
       setCurrentUserId(userData._id);
+
+      const isOwner = jobData.author?._id === userData._id;
+
+      if (isOwner) {
+        const applicationsResponse = await fetch(
+          `${API_URL}/api/jobs/${id}/applications`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        if (applicationsResponse.ok) {
+          const applicationsData = await applicationsResponse.json();
+          setApplications(applicationsData);
+        } else {
+          setApplications([]);
+        }
+
+        setHasApplied(false);
+        setApplicationStatus(null);
+      } else {
+        setApplications([]);
+
+        const applicationResponse = await fetch(
+          `${API_URL}/api/jobs/${id}/application`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        const applicationData =
+          (await applicationResponse.json()) as ApplicationResponse;
+
+        if (applicationResponse.ok) {
+          setHasApplied(applicationData.applied);
+          setApplicationStatus(applicationData.application?.status ?? null);
+        }
+      }
     } catch (error) {
       console.error("Job details error:", error);
 
@@ -116,6 +200,183 @@ export default function JobDetailsScreen() {
       setMenuVisible(false);
     }, [id]),
   );
+
+  const handleApply = async () => {
+    try {
+      setApplying(true);
+
+      const token = await SecureStore.getItemAsync("token");
+
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/jobs/${id}/apply`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        Alert.alert("Błąd", data.message || "Nie udało się wysłać zgłoszenia.");
+        return;
+      }
+
+      setHasApplied(true);
+      setApplicationStatus("pending");
+
+      Alert.alert("Gotowe", "Zgłoszenie zostało wysłane.");
+    } catch (error) {
+      console.error("Apply to job error:", error);
+
+      Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    Alert.alert(
+      "Wycofaj zgłoszenie",
+      "Czy na pewno chcesz wycofać swoje zgłoszenie?",
+      [
+        {
+          text: "Anuluj",
+          style: "cancel",
+        },
+        {
+          text: "Wycofaj",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setWithdrawing(true);
+
+              const token = await SecureStore.getItemAsync("token");
+
+              if (!token) {
+                router.replace("/login");
+                return;
+              }
+
+              const response = await fetch(
+                `${API_URL}/api/jobs/${id}/application`,
+                {
+                  method: "DELETE",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                },
+              );
+
+              let data;
+
+              try {
+                data = await response.json();
+              } catch {
+                data = {};
+              }
+
+              if (!response.ok) {
+                Alert.alert(
+                  "Błąd",
+                  data.message || "Nie udało się wycofać zgłoszenia.",
+                );
+                return;
+              }
+
+              setHasApplied(false);
+              setApplicationStatus(null);
+
+              Alert.alert("Gotowe", "Zgłoszenie zostało wycofane.");
+            } catch (error) {
+              console.error("Withdraw application error:", error);
+
+              Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
+            } finally {
+              setWithdrawing(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const acceptApplication = async (applicationId: string) => {
+    try {
+      setAcceptingApplicationId(applicationId);
+
+      const token = await SecureStore.getItemAsync("token");
+
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(
+        `${API_URL}/api/jobs/applications/${applicationId}/accept`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        Alert.alert("Błąd", data.message || "Nie udało się wybrać kandydata.");
+        return;
+      }
+
+      await fetchData();
+
+      Alert.alert("Gotowe", "Kandydat został wybrany jako wykonawca.");
+    } catch (error) {
+      console.error("Accept application error:", error);
+
+      Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
+    } finally {
+      setAcceptingApplicationId(null);
+    }
+  };
+
+  const handleAcceptApplication = (
+    applicationId: string,
+    firstName: string,
+    lastName: string,
+  ) => {
+    Alert.alert(
+      "Wybierz wykonawcę",
+      `Czy na pewno chcesz wybrać ${firstName} ${lastName} do wykonania tego zlecenia?`,
+      [
+        {
+          text: "Anuluj",
+          style: "cancel",
+        },
+        {
+          text: "Wybierz",
+          onPress: () => acceptApplication(applicationId),
+        },
+      ],
+    );
+  };
 
   const deleteJob = async () => {
     try {
@@ -321,7 +582,7 @@ export default function JobDetailsScreen() {
               </View>
             )}
 
-            <View>
+            <View style={styles.authorInfo}>
               <Text style={styles.authorName}>
                 {job.author?.firstName} {job.author?.lastName}
               </Text>
@@ -330,21 +591,199 @@ export default function JobDetailsScreen() {
                 <Text style={styles.authorCity}>{job.author.city}</Text>
               ) : null}
             </View>
+
+            <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
           </Pressable>
         </View>
 
+        {isOwner && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Kandydaci ({applications.length})
+            </Text>
+
+            {applications.length === 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.emptyText}>
+                  Nikt jeszcze nie zgłosił się do tego zlecenia.
+                </Text>
+              </View>
+            ) : (
+              applications.map((application) => (
+                <View key={application._id} style={styles.applicantCard}>
+                  <Pressable
+                    style={styles.applicantProfileRow}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/user/[id]",
+                        params: {
+                          id: application.applicant._id,
+                        },
+                      })
+                    }
+                  >
+                    {application.applicant.avatar ? (
+                      <Image
+                        source={{
+                          uri: application.applicant.avatar,
+                        }}
+                        style={styles.applicantAvatar}
+                      />
+                    ) : (
+                      <View style={styles.applicantAvatarPlaceholder}>
+                        <Ionicons name="person" size={24} color="#64748B" />
+                      </View>
+                    )}
+
+                    <View style={styles.applicantInfo}>
+                      <Text style={styles.applicantName}>
+                        {application.applicant.firstName}{" "}
+                        {application.applicant.lastName}
+                      </Text>
+
+                      {application.applicant.city ? (
+                        <Text style={styles.applicantCity}>
+                          {application.applicant.city}
+                        </Text>
+                      ) : null}
+
+                      <Text style={styles.applicantStatus}>
+                        {applicationStatusLabels[application.status] ??
+                          application.status}
+                      </Text>
+                    </View>
+
+                    <Ionicons
+                      name="chevron-forward"
+                      size={20}
+                      color="#94A3B8"
+                    />
+                  </Pressable>
+
+                  {application.status === "pending" &&
+                    job.status === "open" && (
+                      <Pressable
+                        style={[
+                          styles.selectApplicantButton,
+                          acceptingApplicationId !== null &&
+                            styles.selectApplicantButtonDisabled,
+                        ]}
+                        disabled={acceptingApplicationId !== null}
+                        onPress={() =>
+                          handleAcceptApplication(
+                            application._id,
+                            application.applicant.firstName,
+                            application.applicant.lastName,
+                          )
+                        }
+                      >
+                        {acceptingApplicationId === application._id ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <Text style={styles.selectApplicantButtonText}>
+                            Wybierz kandydata
+                          </Text>
+                        )}
+                      </Pressable>
+                    )}
+                </View>
+              ))
+            )}
+          </View>
+        )}
+
         {!isOwner && (
-          <Pressable
-            style={styles.applyButton}
-            onPress={() =>
-              Alert.alert(
-                "Jeszcze chwila",
-                "System zgłoszeń dodamy w kolejnym etapie.",
-              )
-            }
-          >
-            <Text style={styles.applyButtonText}>Zgłoś się do zlecenia</Text>
-          </Pressable>
+          <View style={styles.applicationSection}>
+            {hasApplied && applicationStatus && (
+              <View style={styles.applicationMessageBox}>
+                {applicationStatus === "pending" && (
+                  <>
+                    <Ionicons name="time-outline" size={26} color="#D97706" />
+
+                    <View style={styles.applicationMessageContent}>
+                      <Text style={styles.applicationPendingTitle}>
+                        Oczekuje na decyzję
+                      </Text>
+
+                      <Text style={styles.applicationMessageText}>
+                        Zleceniodawca jeszcze nie wybrał wykonawcy.
+                      </Text>
+                    </View>
+                  </>
+                )}
+
+                {applicationStatus === "accepted" && (
+                  <>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={28}
+                      color="#16A34A"
+                    />
+
+                    <View style={styles.applicationMessageContent}>
+                      <Text style={styles.applicationAcceptedTitle}>
+                        Zostałeś wybrany
+                      </Text>
+
+                      <Text style={styles.applicationMessageText}>
+                        Zleceniodawca wybrał Cię do wykonania tego zlecenia.
+                      </Text>
+                    </View>
+                  </>
+                )}
+
+                {applicationStatus === "rejected" && (
+                  <>
+                    <Ionicons name="close-circle" size={28} color="#DC2626" />
+
+                    <View style={styles.applicationMessageContent}>
+                      <Text style={styles.applicationRejectedTitle}>
+                        Nie wybrano Twojego zgłoszenia
+                      </Text>
+
+                      <Text style={styles.applicationMessageText}>
+                        Zleceniodawca wybrał innego wykonawcę.
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </View>
+            )}
+
+            {!hasApplied ? (
+              <Pressable
+                style={[
+                  styles.applyButton,
+                  applying && styles.applyButtonDisabled,
+                ]}
+                onPress={handleApply}
+                disabled={applying}
+              >
+                <Text style={styles.applyButtonText}>
+                  {applying ? "Wysyłanie..." : "Zgłoś się do zlecenia"}
+                </Text>
+              </Pressable>
+            ) : applicationStatus === "pending" ? (
+              <Pressable
+                style={[
+                  styles.withdrawButton,
+                  withdrawing && styles.applyButtonDisabled,
+                ]}
+                onPress={handleWithdraw}
+                disabled={withdrawing}
+              >
+                <Text style={styles.withdrawButtonText}>
+                  {withdrawing ? "Wycofywanie..." : "Wycofaj zgłoszenie"}
+                </Text>
+              </Pressable>
+            ) : (
+              <View style={styles.applicationLocked}>
+                <Text style={styles.applicationLockedText}>
+                  Zgłoszenie zostało już rozpatrzone.
+                </Text>
+              </View>
+            )}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -530,6 +969,11 @@ const styles = StyleSheet.create({
     color: "#334155",
   },
 
+  emptyText: {
+    fontSize: 15,
+    color: "#64748B",
+  },
+
   authorCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
@@ -537,6 +981,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
+  },
+
+  authorInfo: {
+    flex: 1,
   },
 
   avatar: {
@@ -566,17 +1014,161 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  applicantCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
+  },
+
+  applicantProfileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  applicantAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+
+  applicantAvatarPlaceholder: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#E2E8F0",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  applicantInfo: {
+    flex: 1,
+  },
+
+  applicantName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+
+  applicantCity: {
+    fontSize: 14,
+    color: "#64748B",
+    marginTop: 3,
+  },
+
+  applicantStatus: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2563EB",
+    marginTop: 5,
+  },
+
+  selectApplicantButton: {
+    backgroundColor: "#2563EB",
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 14,
+  },
+
+  selectApplicantButtonDisabled: {
+    opacity: 0.55,
+  },
+
+  selectApplicantButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  applicationSection: {
+    marginTop: 32,
+  },
+
+  applicationMessageBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 14,
+  },
+
+  applicationMessageContent: {
+    flex: 1,
+  },
+
+  applicationPendingTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#D97706",
+  },
+
+  applicationAcceptedTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#16A34A",
+  },
+
+  applicationRejectedTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#DC2626",
+  },
+
+  applicationMessageText: {
+    marginTop: 4,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#64748B",
+  },
+
   applyButton: {
     backgroundColor: "#2563EB",
     paddingVertical: 18,
     borderRadius: 18,
     alignItems: "center",
-    marginTop: 32,
+  },
+
+  applyButtonDisabled: {
+    opacity: 0.55,
   },
 
   applyButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "700",
+  },
+
+  withdrawButton: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#DC2626",
+    paddingVertical: 18,
+    borderRadius: 18,
+    alignItems: "center",
+  },
+
+  withdrawButtonText: {
+    color: "#DC2626",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+  applicationLocked: {
+    backgroundColor: "#F1F5F9",
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    alignItems: "center",
+  },
+
+  applicationLockedText: {
+    color: "#64748B",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
