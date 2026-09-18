@@ -1,7 +1,5 @@
-import { Tabs } from "expo-router";
-import React from "react";
-
 import { Ionicons } from "@expo/vector-icons";
+import { Tabs } from "expo-router";
 
 export default function TabLayout() {
 	return (
@@ -10,65 +8,71 @@ export default function TabLayout() {
 				headerShown: false,
 
 				tabBarStyle: {
-					height: 88,
-					paddingTop: 10,
-					paddingBottom: 10,
+					height: 92,
+					paddingTop: 8,
+					paddingBottom: 12,
 					borderTopWidth: 1,
 					borderTopColor: "#E5E7EB",
 					backgroundColor: "#FFFFFF",
 				},
 
 				tabBarActiveTintColor: "#2563EB",
-
 				tabBarInactiveTintColor: "#94A3B8",
 
 				tabBarLabelStyle: {
-					fontSize: 12,
+					fontSize: 10,
 					fontWeight: "600",
+					marginTop: 2,
+				},
+
+				tabBarItemStyle: {
+					paddingHorizontal: 0,
 				},
 			}}>
-			{/* Przeglądaj */}
 			<Tabs.Screen
 				name='index'
 				options={{
 					title: "Przeglądaj",
-
 					tabBarIcon: ({ color, size }) => (
 						<Ionicons name='search' size={size} color={color} />
 					),
 				}}
 			/>
 
-			{/* Dodaj zlecenie */}
+			<Tabs.Screen
+				name='map'
+				options={{
+					title: "Mapa",
+					tabBarIcon: ({ color, size }) => (
+						<Ionicons name='map' size={size} color={color} />
+					),
+				}}
+			/>
+
 			<Tabs.Screen
 				name='post'
 				options={{
 					title: "Dodaj",
-
 					tabBarIcon: ({ color, size }) => (
 						<Ionicons name='add-circle' size={size} color={color} />
 					),
 				}}
 			/>
 
-			{/* Moje zlecenia */}
 			<Tabs.Screen
 				name='my-jobs'
 				options={{
 					title: "Moje",
-
 					tabBarIcon: ({ color, size }) => (
 						<Ionicons name='briefcase' size={size} color={color} />
 					),
 				}}
 			/>
 
-			{/* Profil */}
 			<Tabs.Screen
 				name='profile'
 				options={{
 					title: "Profil",
-
 					tabBarIcon: ({ color, size }) => (
 						<Ionicons name='person' size={size} color={color} />
 					),
