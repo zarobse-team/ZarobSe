@@ -8,6 +8,7 @@ export interface IJob extends Document {
   budget: number;
   status: "open" | "assigned" | "in_progress" | "completed";
   author: mongoose.Types.ObjectId;
+  assignedTo?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -57,6 +58,12 @@ const jobSchema = new Schema<IJob>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+    },
+
+    assignedTo: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
   },
   {
