@@ -85,7 +85,6 @@ export default function JobDetailsScreen() {
   >(null);
 
   const [withdrawing, setWithdrawing] = useState(false);
-
   const [applications, setApplications] = useState<JobApplication[]>([]);
 
   const [acceptingApplicationId, setAcceptingApplicationId] = useState<
@@ -93,10 +92,9 @@ export default function JobDetailsScreen() {
   >(null);
 
   const [startingJob, setStartingJob] = useState(false);
-
   const [requestingCompletion, setRequestingCompletion] = useState(false);
-
   const [completingJob, setCompletingJob] = useState(false);
+  const [cancellingJob, setCancellingJob] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -565,6 +563,67 @@ export default function JobDetailsScreen() {
         {
           text: "Potwierdź",
           onPress: completeJob,
+        },
+      ],
+    );
+  };
+
+  const cancelJob = async () => {
+    try {
+      setCancellingJob(true);
+
+      const token = await SecureStore.getItemAsync("token");
+
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/jobs/${id}/cancel`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        Alert.alert("Błąd", data.message || "Nie udało się anulować zlecenia.");
+        return;
+      }
+
+      Alert.alert("Gotowe", "Zlecenie zostało anulowane.");
+
+      await fetchData();
+    } catch (error) {
+      console.error("Cancel job error:", error);
+
+      Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
+    } finally {
+      setCancellingJob(false);
+    }
+  };
+
+  const handleCancelJob = () => {
+    Alert.alert(
+      "Anuluj zlecenie",
+      "Czy na pewno chcesz anulować to zlecenie? Zlecenie pozostanie w historii, ale nie będzie już realizowane.",
+      [
+        {
+          text: "Nie",
+          style: "cancel",
+        },
+        {
+          text: "Anuluj zlecenie",
+          style: "destructive",
+          onPress: cancelJob,
         },
       ],
     );
@@ -1050,6 +1109,44 @@ export default function JobDetailsScreen() {
                   {completingJob ? "Potwierdzanie..." : "Potwierdź zakończenie"}
                 </Text>
               </Pressable>
+            </View>
+          </View>
+        )}
+
+        {isOwner &&
+          (job.status === "assigned" || job.status === "in_progress") && (
+            <View style={styles.cancelSection}>
+              <Pressable
+                style={[
+                  styles.cancelJobButton,
+                  cancellingJob && styles.buttonDisabled,
+                ]}
+                onPress={handleCancelJob}
+                disabled={cancellingJob}
+              >
+                <Ionicons
+                  name="close-circle-outline"
+                  size={21}
+                  color="#DC2626"
+                />
+
+                <Text style={styles.cancelJobButtonText}>
+                  {cancellingJob ? "Anulowanie..." : "Anuluj zlecenie"}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
+        {job.status === "cancelled" && (
+          <View style={styles.jobActionSection}>
+            <View style={styles.cancelledCard}>
+              <Ionicons name="close-circle" size={42} color="#DC2626" />
+
+              <Text style={styles.jobActionTitle}>Zlecenie anulowane</Text>
+
+              <Text style={styles.jobActionText}>
+                To zlecenie zostało anulowane przez zleceniodawcę.
+              </Text>
             </View>
           </View>
         )}
@@ -1551,6 +1648,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  cancelledCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+  },
+
   jobActionTitle: {
     marginTop: 10,
     fontSize: 18,
@@ -1609,6 +1713,27 @@ const styles = StyleSheet.create({
   confirmCompletionButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
+    fontWeight: "700",
+  },
+
+  cancelSection: {
+    marginTop: 18,
+  },
+
+  cancelJobButton: {
+    borderWidth: 1,
+    borderColor: "#DC2626",
+    borderRadius: 16,
+    paddingVertical: 15,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  cancelJobButtonText: {
+    color: "#DC2626",
+    fontSize: 15,
     fontWeight: "700",
   },
 

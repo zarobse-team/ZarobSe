@@ -21,6 +21,8 @@ import {
   updateJob,
 } from "../controllers/jobs.controller";
 
+import { cancelJob } from "../controllers/jobStatus.controller";
+
 import { authMiddleware } from "../middleware/auth.middleware";
 
 const router = Router();
@@ -54,6 +56,8 @@ router.patch("/:id/start", authMiddleware, startJob);
 router.patch("/:id/request-completion", authMiddleware, requestJobCompletion);
 
 router.patch("/:id/complete", authMiddleware, completeJob);
+
+router.patch("/:id/cancel", authMiddleware, cancelJob);
 
 router.patch("/:id", authMiddleware, updateJob);
 
