@@ -16,6 +16,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { API_URL } from "../../constants/api";
 
+type UserData = {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  avatar?: string;
+  city?: string;
+  bio?: string;
+};
+
 type Job = {
   _id: string;
   title: string;
@@ -23,14 +32,10 @@ type Job = {
   category: string;
   city: string;
   budget: number;
-  status: string;
-  author: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    avatar: string;
-    city: string;
-  };
+  status: "open" | "assigned" | "in_progress" | "completed" | "cancelled";
+  completionRequested: boolean;
+  author: UserData;
+  assignedTo?: UserData | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -50,14 +55,8 @@ type ApplicationResponse = {
 type JobApplication = {
   _id: string;
   status: "pending" | "accepted" | "rejected";
-  applicant: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    avatar?: string;
-    city?: string;
-    bio?: string;
-  };
+  applicant: UserData;
+  createdAt: string;
 };
 
 const statusLabels: Record<string, string> = {
@@ -66,12 +65,6 @@ const statusLabels: Record<string, string> = {
   in_progress: "W trakcie",
   completed: "Zakończone",
   cancelled: "Anulowane",
-};
-
-const applicationStatusLabels: Record<string, string> = {
-  pending: "Oczekuje",
-  accepted: "Zaakceptowano",
-  rejected: "Odrzucono",
 };
 
 export default function JobDetailsScreen() {
@@ -86,9 +79,10 @@ export default function JobDetailsScreen() {
 
   const [applying, setApplying] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
-  const [applicationStatus, setApplicationStatus] = useState<string | null>(
-    null,
-  );
+
+  const [applicationStatus, setApplicationStatus] = useState<
+    "pending" | "accepted" | "rejected" | null
+  >(null);
 
   const [withdrawing, setWithdrawing] = useState(false);
 
@@ -97,6 +91,12 @@ export default function JobDetailsScreen() {
   const [acceptingApplicationId, setAcceptingApplicationId] = useState<
     string | null
   >(null);
+
+  const [startingJob, setStartingJob] = useState(false);
+
+  const [requestingCompletion, setRequestingCompletion] = useState(false);
+
+  const [completingJob, setCompletingJob] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -144,6 +144,9 @@ export default function JobDetailsScreen() {
       const isOwner = jobData.author?._id === userData._id;
 
       if (isOwner) {
+        setHasApplied(false);
+        setApplicationStatus(null);
+
         const applicationsResponse = await fetch(
           `${API_URL}/api/jobs/${id}/applications`,
           {
@@ -153,15 +156,13 @@ export default function JobDetailsScreen() {
           },
         );
 
+        const applicationsData = await applicationsResponse.json();
+
         if (applicationsResponse.ok) {
-          const applicationsData = await applicationsResponse.json();
           setApplications(applicationsData);
         } else {
           setApplications([]);
         }
-
-        setHasApplied(false);
-        setApplicationStatus(null);
       } else {
         setApplications([]);
 
@@ -245,7 +246,54 @@ export default function JobDetailsScreen() {
     }
   };
 
-  const handleWithdraw = async () => {
+  const withdrawApplication = async () => {
+    try {
+      setWithdrawing(true);
+
+      const token = await SecureStore.getItemAsync("token");
+
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/jobs/${id}/application`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        Alert.alert(
+          "Błąd",
+          data.message || "Nie udało się wycofać zgłoszenia.",
+        );
+        return;
+      }
+
+      setHasApplied(false);
+      setApplicationStatus(null);
+
+      Alert.alert("Gotowe", "Zgłoszenie zostało wycofane.");
+    } catch (error) {
+      console.error("Withdraw application error:", error);
+
+      Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  const handleWithdrawApplication = () => {
     Alert.alert(
       "Wycofaj zgłoszenie",
       "Czy na pewno chcesz wycofać swoje zgłoszenie?",
@@ -257,55 +305,7 @@ export default function JobDetailsScreen() {
         {
           text: "Wycofaj",
           style: "destructive",
-          onPress: async () => {
-            try {
-              setWithdrawing(true);
-
-              const token = await SecureStore.getItemAsync("token");
-
-              if (!token) {
-                router.replace("/login");
-                return;
-              }
-
-              const response = await fetch(
-                `${API_URL}/api/jobs/${id}/application`,
-                {
-                  method: "DELETE",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                  },
-                },
-              );
-
-              let data;
-
-              try {
-                data = await response.json();
-              } catch {
-                data = {};
-              }
-
-              if (!response.ok) {
-                Alert.alert(
-                  "Błąd",
-                  data.message || "Nie udało się wycofać zgłoszenia.",
-                );
-                return;
-              }
-
-              setHasApplied(false);
-              setApplicationStatus(null);
-
-              Alert.alert("Gotowe", "Zgłoszenie zostało wycofane.");
-            } catch (error) {
-              console.error("Withdraw application error:", error);
-
-              Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
-            } finally {
-              setWithdrawing(false);
-            }
-          },
+          onPress: withdrawApplication,
         },
       ],
     );
@@ -345,9 +345,9 @@ export default function JobDetailsScreen() {
         return;
       }
 
-      await fetchData();
+      Alert.alert("Gotowe", "Kandydat został wybrany.");
 
-      Alert.alert("Gotowe", "Kandydat został wybrany jako wykonawca.");
+      await fetchData();
     } catch (error) {
       console.error("Accept application error:", error);
 
@@ -364,7 +364,7 @@ export default function JobDetailsScreen() {
   ) => {
     Alert.alert(
       "Wybierz wykonawcę",
-      `Czy na pewno chcesz wybrać ${firstName} ${lastName} do wykonania tego zlecenia?`,
+      `Czy na pewno chcesz wybrać ${firstName} ${lastName} do tego zlecenia?`,
       [
         {
           text: "Anuluj",
@@ -373,6 +373,198 @@ export default function JobDetailsScreen() {
         {
           text: "Wybierz",
           onPress: () => acceptApplication(applicationId),
+        },
+      ],
+    );
+  };
+
+  const startJob = async () => {
+    try {
+      setStartingJob(true);
+
+      const token = await SecureStore.getItemAsync("token");
+
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/jobs/${id}/start`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        Alert.alert(
+          "Błąd",
+          data.message || "Nie udało się rozpocząć zlecenia.",
+        );
+        return;
+      }
+
+      Alert.alert("Gotowe", "Zlecenie zostało rozpoczęte.");
+
+      await fetchData();
+    } catch (error) {
+      console.error("Start job error:", error);
+
+      Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
+    } finally {
+      setStartingJob(false);
+    }
+  };
+
+  const handleStartJob = () => {
+    Alert.alert(
+      "Rozpocznij zlecenie",
+      "Czy na pewno chcesz rozpocząć realizację tego zlecenia?",
+      [
+        {
+          text: "Anuluj",
+          style: "cancel",
+        },
+        {
+          text: "Rozpocznij",
+          onPress: startJob,
+        },
+      ],
+    );
+  };
+
+  const requestCompletion = async () => {
+    try {
+      setRequestingCompletion(true);
+
+      const token = await SecureStore.getItemAsync("token");
+
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(
+        `${API_URL}/api/jobs/${id}/request-completion`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        Alert.alert(
+          "Błąd",
+          data.message || "Nie udało się oznaczyć zlecenia jako wykonanego.",
+        );
+        return;
+      }
+
+      Alert.alert("Gotowe", "Zlecenie zostało oznaczone jako wykonane.");
+
+      await fetchData();
+    } catch (error) {
+      console.error("Request completion error:", error);
+
+      Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
+    } finally {
+      setRequestingCompletion(false);
+    }
+  };
+
+  const handleRequestCompletion = () => {
+    Alert.alert(
+      "Oznacz jako wykonane",
+      "Czy na pewno zakończyłeś realizację tego zlecenia?",
+      [
+        {
+          text: "Anuluj",
+          style: "cancel",
+        },
+        {
+          text: "Oznacz jako wykonane",
+          onPress: requestCompletion,
+        },
+      ],
+    );
+  };
+
+  const completeJob = async () => {
+    try {
+      setCompletingJob(true);
+
+      const token = await SecureStore.getItemAsync("token");
+
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/jobs/${id}/complete`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        Alert.alert(
+          "Błąd",
+          data.message || "Nie udało się zakończyć zlecenia.",
+        );
+        return;
+      }
+
+      Alert.alert("Gotowe", "Zlecenie zostało zakończone.");
+
+      await fetchData();
+    } catch (error) {
+      console.error("Complete job error:", error);
+
+      Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
+    } finally {
+      setCompletingJob(false);
+    }
+  };
+
+  const handleCompleteJob = () => {
+    Alert.alert(
+      "Potwierdź zakończenie",
+      "Czy potwierdzasz, że zlecenie zostało wykonane?",
+      [
+        {
+          text: "Anuluj",
+          style: "cancel",
+        },
+        {
+          text: "Potwierdź",
+          onPress: completeJob,
         },
       ],
     );
@@ -466,6 +658,8 @@ export default function JobDetailsScreen() {
 
   const isOwner = job.author?._id === currentUserId;
 
+  const isAssignedWorker = job.assignedTo?._id === currentUserId;
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <ScrollView
@@ -479,7 +673,7 @@ export default function JobDetailsScreen() {
             <Text style={styles.backText}>Wróć</Text>
           </Pressable>
 
-          {isOwner && (
+          {isOwner && job.status === "open" && (
             <View style={styles.menuWrapper}>
               <Pressable
                 style={styles.menuButton}
@@ -501,7 +695,9 @@ export default function JobDetailsScreen() {
 
                       router.push({
                         pathname: "/job/edit/[id]",
-                        params: { id: job._id },
+                        params: {
+                          id: job._id,
+                        },
                       });
                     }}
                   >
@@ -563,17 +759,21 @@ export default function JobDetailsScreen() {
           <Text style={styles.sectionTitle}>Zleceniodawca</Text>
 
           <Pressable
-            style={styles.authorCard}
+            style={styles.personCard}
             onPress={() =>
               router.push({
                 pathname: "/user/[id]",
-                params: { id: job.author._id },
+                params: {
+                  id: job.author._id,
+                },
               })
             }
           >
             {job.author?.avatar ? (
               <Image
-                source={{ uri: job.author.avatar }}
+                source={{
+                  uri: job.author.avatar,
+                }}
                 style={styles.avatar}
               />
             ) : (
@@ -582,13 +782,13 @@ export default function JobDetailsScreen() {
               </View>
             )}
 
-            <View style={styles.authorInfo}>
-              <Text style={styles.authorName}>
+            <View style={styles.personInfo}>
+              <Text style={styles.personName}>
                 {job.author?.firstName} {job.author?.lastName}
               </Text>
 
               {job.author?.city ? (
-                <Text style={styles.authorCity}>{job.author.city}</Text>
+                <Text style={styles.personCity}>{job.author.city}</Text>
               ) : null}
             </View>
 
@@ -596,166 +796,353 @@ export default function JobDetailsScreen() {
           </Pressable>
         </View>
 
-        {isOwner && (
+        {job.assignedTo && job.status !== "open" && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Kandydaci ({applications.length})
-            </Text>
+            <Text style={styles.sectionTitle}>Wybrany wykonawca</Text>
 
-            {applications.length === 0 ? (
-              <View style={styles.card}>
-                <Text style={styles.emptyText}>
-                  Nikt jeszcze nie zgłosił się do tego zlecenia.
+            <Pressable
+              style={styles.personCard}
+              onPress={() =>
+                router.push({
+                  pathname: "/user/[id]",
+                  params: {
+                    id: job.assignedTo!._id,
+                  },
+                })
+              }
+            >
+              {job.assignedTo.avatar ? (
+                <Image
+                  source={{
+                    uri: job.assignedTo.avatar,
+                  }}
+                  style={styles.avatar}
+                />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Ionicons name="person" size={28} color="#64748B" />
+                </View>
+              )}
+
+              <View style={styles.personInfo}>
+                <Text style={styles.personName}>
+                  {job.assignedTo.firstName} {job.assignedTo.lastName}
                 </Text>
+
+                {job.assignedTo.city ? (
+                  <Text style={styles.personCity}>{job.assignedTo.city}</Text>
+                ) : null}
               </View>
-            ) : (
-              applications.map((application) => (
-                <View key={application._id} style={styles.applicantCard}>
+
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </Pressable>
+          </View>
+        )}
+
+        {isOwner && job.status === "open" && applications.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Kandydaci</Text>
+
+            {applications.map((application) => (
+              <View key={application._id} style={styles.applicationCard}>
+                <Pressable
+                  style={styles.applicantRow}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/user/[id]",
+                      params: {
+                        id: application.applicant._id,
+                      },
+                    })
+                  }
+                >
+                  {application.applicant.avatar ? (
+                    <Image
+                      source={{
+                        uri: application.applicant.avatar,
+                      }}
+                      style={styles.applicantAvatar}
+                    />
+                  ) : (
+                    <View style={styles.applicantAvatarPlaceholder}>
+                      <Ionicons name="person" size={24} color="#64748B" />
+                    </View>
+                  )}
+
+                  <View style={styles.applicantInfo}>
+                    <Text style={styles.applicantName}>
+                      {application.applicant.firstName}{" "}
+                      {application.applicant.lastName}
+                    </Text>
+
+                    {application.applicant.city ? (
+                      <Text style={styles.applicantCity}>
+                        {application.applicant.city}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+                </Pressable>
+
+                {application.status === "pending" && (
                   <Pressable
-                    style={styles.applicantProfileRow}
+                    style={[
+                      styles.selectApplicantButton,
+                      acceptingApplicationId !== null && styles.buttonDisabled,
+                    ]}
+                    disabled={acceptingApplicationId !== null}
                     onPress={() =>
-                      router.push({
-                        pathname: "/user/[id]",
-                        params: {
-                          id: application.applicant._id,
-                        },
-                      })
+                      handleAcceptApplication(
+                        application._id,
+                        application.applicant.firstName,
+                        application.applicant.lastName,
+                      )
                     }
                   >
-                    {application.applicant.avatar ? (
-                      <Image
-                        source={{
-                          uri: application.applicant.avatar,
-                        }}
-                        style={styles.applicantAvatar}
-                      />
-                    ) : (
-                      <View style={styles.applicantAvatarPlaceholder}>
-                        <Ionicons name="person" size={24} color="#64748B" />
-                      </View>
-                    )}
-
-                    <View style={styles.applicantInfo}>
-                      <Text style={styles.applicantName}>
-                        {application.applicant.firstName}{" "}
-                        {application.applicant.lastName}
-                      </Text>
-
-                      {application.applicant.city ? (
-                        <Text style={styles.applicantCity}>
-                          {application.applicant.city}
-                        </Text>
-                      ) : null}
-
-                      <Text style={styles.applicantStatus}>
-                        {applicationStatusLabels[application.status] ??
-                          application.status}
-                      </Text>
-                    </View>
-
-                    <Ionicons
-                      name="chevron-forward"
-                      size={20}
-                      color="#94A3B8"
-                    />
+                    <Text style={styles.selectApplicantButtonText}>
+                      {acceptingApplicationId === application._id
+                        ? "Wybieranie..."
+                        : "Wybierz kandydata"}
+                    </Text>
                   </Pressable>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
 
-                  {application.status === "pending" &&
-                    job.status === "open" && (
-                      <Pressable
-                        style={[
-                          styles.selectApplicantButton,
-                          acceptingApplicationId !== null &&
-                            styles.selectApplicantButtonDisabled,
-                        ]}
-                        disabled={acceptingApplicationId !== null}
-                        onPress={() =>
-                          handleAcceptApplication(
-                            application._id,
-                            application.applicant.firstName,
-                            application.applicant.lastName,
-                          )
-                        }
-                      >
-                        {acceptingApplicationId === application._id ? (
-                          <ActivityIndicator size="small" color="#FFFFFF" />
-                        ) : (
-                          <Text style={styles.selectApplicantButtonText}>
-                            Wybierz kandydata
-                          </Text>
-                        )}
-                      </Pressable>
-                    )}
-                </View>
-              ))
-            )}
+        {isOwner && job.status === "open" && applications.length === 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Kandydaci</Text>
+
+            <View style={styles.emptyCard}>
+              <Ionicons name="people-outline" size={32} color="#94A3B8" />
+
+              <Text style={styles.emptyText}>
+                Nikt jeszcze nie zgłosił się do tego zlecenia.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {isAssignedWorker && job.status === "assigned" && (
+          <View style={styles.jobActionSection}>
+            <View style={styles.jobActionCard}>
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={38}
+                color="#16A34A"
+              />
+
+              <Text style={styles.jobActionTitle}>Zostałeś wybrany</Text>
+
+              <Text style={styles.jobActionText}>
+                Zleceniodawca wybrał Cię do realizacji tego zlecenia. Gdy
+                będziesz gotowy, rozpocznij realizację.
+              </Text>
+
+              <Pressable
+                style={[
+                  styles.startJobButton,
+                  startingJob && styles.buttonDisabled,
+                ]}
+                onPress={handleStartJob}
+                disabled={startingJob}
+              >
+                <Text style={styles.startJobButtonText}>
+                  {startingJob ? "Rozpoczynanie..." : "Rozpocznij zlecenie"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {isAssignedWorker && job.status === "in_progress" && (
+          <View style={styles.jobActionSection}>
+            <View style={styles.progressCard}>
+              <Ionicons
+                name={
+                  job.completionRequested ? "time-outline" : "hammer-outline"
+                }
+                size={36}
+                color={job.completionRequested ? "#D97706" : "#2563EB"}
+              />
+
+              <Text style={styles.jobActionTitle}>
+                {job.completionRequested
+                  ? "Czekamy na potwierdzenie"
+                  : "Zlecenie jest w trakcie"}
+              </Text>
+
+              <Text style={styles.jobActionText}>
+                {job.completionRequested
+                  ? "Oznaczyłeś zlecenie jako wykonane. Zleceniodawca musi teraz potwierdzić zakończenie."
+                  : "Gdy zakończysz realizację, oznacz zlecenie jako wykonane."}
+              </Text>
+
+              {!job.completionRequested && (
+                <Pressable
+                  style={[
+                    styles.completeRequestButton,
+                    requestingCompletion && styles.buttonDisabled,
+                  ]}
+                  onPress={handleRequestCompletion}
+                  disabled={requestingCompletion}
+                >
+                  <Text style={styles.completeRequestButtonText}>
+                    {requestingCompletion
+                      ? "Zapisywanie..."
+                      : "Oznacz jako wykonane"}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
+
+        {isOwner &&
+          job.status === "in_progress" &&
+          !job.completionRequested && (
+            <View style={styles.jobActionSection}>
+              <View style={styles.progressCard}>
+                <Ionicons name="hammer-outline" size={36} color="#2563EB" />
+
+                <Text style={styles.jobActionTitle}>
+                  Zlecenie jest w trakcie
+                </Text>
+
+                <Text style={styles.jobActionText}>
+                  Wykonawca realizuje zlecenie. Gdy oznaczy pracę jako wykonaną,
+                  pojawi się tutaj możliwość potwierdzenia zakończenia.
+                </Text>
+              </View>
+            </View>
+          )}
+
+        {isOwner && job.status === "in_progress" && job.completionRequested && (
+          <View style={styles.jobActionSection}>
+            <View style={styles.completionConfirmCard}>
+              <Ionicons
+                name="checkmark-done-circle-outline"
+                size={40}
+                color="#16A34A"
+              />
+
+              <Text style={styles.jobActionTitle}>
+                Wykonawca zakończył pracę
+              </Text>
+
+              <Text style={styles.jobActionText}>
+                Wykonawca oznaczył zlecenie jako wykonane. Jeśli wszystko się
+                zgadza, potwierdź zakończenie.
+              </Text>
+
+              <Pressable
+                style={[
+                  styles.confirmCompletionButton,
+                  completingJob && styles.buttonDisabled,
+                ]}
+                onPress={handleCompleteJob}
+                disabled={completingJob}
+              >
+                <Text style={styles.confirmCompletionButtonText}>
+                  {completingJob ? "Potwierdzanie..." : "Potwierdź zakończenie"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {job.status === "completed" && (
+          <View style={styles.jobActionSection}>
+            <View style={styles.completedCard}>
+              <Ionicons name="checkmark-circle" size={42} color="#16A34A" />
+
+              <Text style={styles.jobActionTitle}>Zlecenie zakończone</Text>
+
+              <Text style={styles.jobActionText}>
+                Realizacja tego zlecenia została zakończona i potwierdzona.
+              </Text>
+            </View>
           </View>
         )}
 
         {!isOwner && (
           <View style={styles.applicationSection}>
-            {hasApplied && applicationStatus && (
+            {hasApplied && applicationStatus === "pending" && (
+              <>
+                <View style={styles.applicationMessageBox}>
+                  <Ionicons name="time-outline" size={28} color="#D97706" />
+
+                  <View style={styles.applicationMessageContent}>
+                    <Text style={styles.applicationPendingTitle}>
+                      Oczekuje na decyzję
+                    </Text>
+
+                    <Text style={styles.applicationMessageText}>
+                      Twoje zgłoszenie zostało wysłane. Zleceniodawca nie wybrał
+                      jeszcze wykonawcy.
+                    </Text>
+                  </View>
+                </View>
+
+                <Pressable
+                  style={[
+                    styles.withdrawButton,
+                    withdrawing && styles.buttonDisabled,
+                  ]}
+                  disabled={withdrawing}
+                  onPress={handleWithdrawApplication}
+                >
+                  <Text style={styles.withdrawButtonText}>
+                    {withdrawing ? "Wycofywanie..." : "Wycofaj zgłoszenie"}
+                  </Text>
+                </Pressable>
+              </>
+            )}
+
+            {hasApplied &&
+              applicationStatus === "accepted" &&
+              !isAssignedWorker && (
+                <View style={styles.applicationMessageBox}>
+                  <Ionicons name="checkmark-circle" size={30} color="#16A34A" />
+
+                  <View style={styles.applicationMessageContent}>
+                    <Text style={styles.applicationAcceptedTitle}>
+                      Zostałeś wybrany
+                    </Text>
+
+                    <Text style={styles.applicationMessageText}>
+                      Zleceniodawca wybrał Twoje zgłoszenie.
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+            {hasApplied && applicationStatus === "rejected" && (
               <View style={styles.applicationMessageBox}>
-                {applicationStatus === "pending" && (
-                  <>
-                    <Ionicons name="time-outline" size={26} color="#D97706" />
+                <Ionicons
+                  name="close-circle-outline"
+                  size={30}
+                  color="#DC2626"
+                />
 
-                    <View style={styles.applicationMessageContent}>
-                      <Text style={styles.applicationPendingTitle}>
-                        Oczekuje na decyzję
-                      </Text>
+                <View style={styles.applicationMessageContent}>
+                  <Text style={styles.applicationRejectedTitle}>
+                    Nie wybrano Twojego zgłoszenia
+                  </Text>
 
-                      <Text style={styles.applicationMessageText}>
-                        Zleceniodawca jeszcze nie wybrał wykonawcy.
-                      </Text>
-                    </View>
-                  </>
-                )}
-
-                {applicationStatus === "accepted" && (
-                  <>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={28}
-                      color="#16A34A"
-                    />
-
-                    <View style={styles.applicationMessageContent}>
-                      <Text style={styles.applicationAcceptedTitle}>
-                        Zostałeś wybrany
-                      </Text>
-
-                      <Text style={styles.applicationMessageText}>
-                        Zleceniodawca wybrał Cię do wykonania tego zlecenia.
-                      </Text>
-                    </View>
-                  </>
-                )}
-
-                {applicationStatus === "rejected" && (
-                  <>
-                    <Ionicons name="close-circle" size={28} color="#DC2626" />
-
-                    <View style={styles.applicationMessageContent}>
-                      <Text style={styles.applicationRejectedTitle}>
-                        Nie wybrano Twojego zgłoszenia
-                      </Text>
-
-                      <Text style={styles.applicationMessageText}>
-                        Zleceniodawca wybrał innego wykonawcę.
-                      </Text>
-                    </View>
-                  </>
-                )}
+                  <Text style={styles.applicationMessageText}>
+                    Zleceniodawca zdecydował się na innego wykonawcę.
+                  </Text>
+                </View>
               </View>
             )}
 
-            {!hasApplied ? (
+            {!hasApplied && job.status === "open" && (
               <Pressable
-                style={[
-                  styles.applyButton,
-                  applying && styles.applyButtonDisabled,
-                ]}
+                style={[styles.applyButton, applying && styles.buttonDisabled]}
                 onPress={handleApply}
                 disabled={applying}
               >
@@ -763,25 +1150,6 @@ export default function JobDetailsScreen() {
                   {applying ? "Wysyłanie..." : "Zgłoś się do zlecenia"}
                 </Text>
               </Pressable>
-            ) : applicationStatus === "pending" ? (
-              <Pressable
-                style={[
-                  styles.withdrawButton,
-                  withdrawing && styles.applyButtonDisabled,
-                ]}
-                onPress={handleWithdraw}
-                disabled={withdrawing}
-              >
-                <Text style={styles.withdrawButtonText}>
-                  {withdrawing ? "Wycofywanie..." : "Wycofaj zgłoszenie"}
-                </Text>
-              </Pressable>
-            ) : (
-              <View style={styles.applicationLocked}>
-                <Text style={styles.applicationLockedText}>
-                  Zgłoszenie zostało już rozpatrzone.
-                </Text>
-              </View>
             )}
           </View>
         )}
@@ -969,12 +1337,7 @@ const styles = StyleSheet.create({
     color: "#334155",
   },
 
-  emptyText: {
-    fontSize: 15,
-    color: "#64748B",
-  },
-
-  authorCard: {
+  personCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
     padding: 18,
@@ -983,7 +1346,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
 
-  authorInfo: {
+  personInfo: {
     flex: 1,
   },
 
@@ -1002,41 +1365,40 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  authorName: {
+  personName: {
     fontSize: 17,
     fontWeight: "700",
     color: "#0F172A",
   },
 
-  authorCity: {
+  personCity: {
     fontSize: 14,
     color: "#64748B",
     marginTop: 4,
   },
 
-  applicantCard: {
+  applicationCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
     padding: 16,
     marginBottom: 12,
   },
 
-  applicantProfileRow: {
+  applicantRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
   },
 
   applicantAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
 
   applicantAvatarPlaceholder: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: "#E2E8F0",
     justifyContent: "center",
     alignItems: "center",
@@ -1044,6 +1406,7 @@ const styles = StyleSheet.create({
 
   applicantInfo: {
     flex: 1,
+    marginLeft: 12,
   },
 
   applicantName: {
@@ -1058,29 +1421,32 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  applicantStatus: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#2563EB",
-    marginTop: 5,
-  },
-
   selectApplicantButton: {
-    backgroundColor: "#2563EB",
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: "center",
     marginTop: 14,
-  },
-
-  selectApplicantButtonDisabled: {
-    opacity: 0.55,
+    backgroundColor: "#2563EB",
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: "center",
   },
 
   selectApplicantButtonText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
+  },
+
+  emptyCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 22,
+    alignItems: "center",
+  },
+
+  emptyText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#64748B",
+    textAlign: "center",
   },
 
   applicationSection: {
@@ -1133,10 +1499,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  applyButtonDisabled: {
-    opacity: 0.55,
-  },
-
   applyButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
@@ -1144,31 +1506,113 @@ const styles = StyleSheet.create({
   },
 
   withdrawButton: {
-    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#DC2626",
-    paddingVertical: 18,
+    paddingVertical: 16,
     borderRadius: 18,
     alignItems: "center",
   },
 
   withdrawButtonText: {
     color: "#DC2626",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  jobActionSection: {
+    marginTop: 30,
+  },
+
+  jobActionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+  },
+
+  progressCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+  },
+
+  completionConfirmCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+  },
+
+  completedCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+  },
+
+  jobActionTitle: {
+    marginTop: 10,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0F172A",
+    textAlign: "center",
+  },
+
+  jobActionText: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#64748B",
+    textAlign: "center",
+  },
+
+  startJobButton: {
+    width: "100%",
+    marginTop: 18,
+    backgroundColor: "#16A34A",
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+
+  startJobButtonText: {
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "700",
   },
 
-  applicationLocked: {
-    backgroundColor: "#F1F5F9",
+  completeRequestButton: {
+    width: "100%",
+    marginTop: 18,
+    backgroundColor: "#2563EB",
     paddingVertical: 16,
-    paddingHorizontal: 14,
-    borderRadius: 18,
+    borderRadius: 16,
     alignItems: "center",
   },
 
-  applicationLockedText: {
-    color: "#64748B",
-    fontSize: 14,
-    fontWeight: "600",
+  completeRequestButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+  confirmCompletionButton: {
+    width: "100%",
+    marginTop: 18,
+    backgroundColor: "#16A34A",
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+
+  confirmCompletionButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+  buttonDisabled: {
+    opacity: 0.55,
   },
 });

@@ -10,11 +10,14 @@ import {
 } from "../controllers/jobApplications.controller";
 
 import {
+  completeJob,
   createJob,
   deleteJob,
   getJobById,
   getJobs,
   getMyJobs,
+  requestJobCompletion,
+  startJob,
   updateJob,
 } from "../controllers/jobs.controller";
 
@@ -23,6 +26,7 @@ import { authMiddleware } from "../middleware/auth.middleware";
 const router = Router();
 
 router.get("/", authMiddleware, getJobs);
+
 router.get("/my", authMiddleware, getMyJobs);
 
 router.get("/applications/my", authMiddleware, getMyApplications);
@@ -44,6 +48,12 @@ router.patch(
   authMiddleware,
   acceptApplication,
 );
+
+router.patch("/:id/start", authMiddleware, startJob);
+
+router.patch("/:id/request-completion", authMiddleware, requestJobCompletion);
+
+router.patch("/:id/complete", authMiddleware, completeJob);
 
 router.patch("/:id", authMiddleware, updateJob);
 

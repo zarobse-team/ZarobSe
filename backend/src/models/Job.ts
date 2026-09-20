@@ -6,9 +6,10 @@ export interface IJob extends Document {
   category: string;
   city: string;
   budget: number;
-  status: "open" | "assigned" | "in_progress" | "completed";
+  status: "open" | "assigned" | "in_progress" | "completed" | "cancelled";
   author: mongoose.Types.ObjectId;
   assignedTo?: mongoose.Types.ObjectId;
+  completionRequested: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,49 +22,46 @@ const jobSchema = new Schema<IJob>(
       trim: true,
       maxlength: 100,
     },
-
     description: {
       type: String,
       required: true,
       trim: true,
       maxlength: 1000,
     },
-
     category: {
       type: String,
       required: true,
       trim: true,
     },
-
     city: {
       type: String,
       required: true,
       trim: true,
       maxlength: 80,
     },
-
     budget: {
       type: Number,
       required: true,
       min: 0,
     },
-
     status: {
       type: String,
-      enum: ["open", "assigned", "in_progress", "completed"],
+      enum: ["open", "assigned", "in_progress", "completed", "cancelled"],
       default: "open",
     },
-
     author: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-
     assignedTo: {
       type: Schema.Types.ObjectId,
       ref: "User",
       default: null,
+    },
+    completionRequested: {
+      type: Boolean,
+      default: false,
     },
   },
   {
