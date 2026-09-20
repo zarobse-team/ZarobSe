@@ -15,6 +15,13 @@ import {
 
 import { API_URL } from "../../constants/api";
 
+type JobStatus =
+  | "open"
+  | "assigned"
+  | "in_progress"
+  | "completed"
+  | "cancelled";
+
 type Job = {
   _id: string;
   title: string;
@@ -22,13 +29,15 @@ type Job = {
   category: string;
   city: string;
   budget: number;
-  status: string;
+  status: JobStatus;
   createdAt: string;
 };
 
+type ApplicationStatus = "pending" | "accepted" | "rejected";
+
 type Application = {
   _id: string;
-  status: "pending" | "accepted" | "rejected";
+  status: ApplicationStatus;
   createdAt: string;
   job: {
     _id: string;
@@ -37,7 +46,7 @@ type Application = {
     category: string;
     city: string;
     budget: number;
-    status: string;
+    status: JobStatus;
     author: {
       _id: string;
       firstName: string;
@@ -50,10 +59,86 @@ type Application = {
 
 type ActiveTab = "posted" | "applied";
 
-const applicationStatusLabels: Record<string, string> = {
+const jobStatusLabels: Record<JobStatus, string> = {
+  open: "Otwarte",
+  assigned: "Przydzielone",
+  in_progress: "W trakcie",
+  completed: "Zakończone",
+  cancelled: "Anulowane",
+};
+
+const applicationStatusLabels: Record<ApplicationStatus, string> = {
   pending: "Oczekuje",
-  accepted: "Zaakceptowano",
-  rejected: "Odrzucono",
+  accepted: "Wybrano Ciebie",
+  rejected: "Nie wybrano",
+};
+
+const getJobStatusColors = (status: JobStatus) => {
+  switch (status) {
+    case "open":
+      return {
+        backgroundColor: "#EFF6FF",
+        textColor: "#2563EB",
+      };
+
+    case "assigned":
+      return {
+        backgroundColor: "#F3E8FF",
+        textColor: "#7E22CE",
+      };
+
+    case "in_progress":
+      return {
+        backgroundColor: "#FFF7ED",
+        textColor: "#D97706",
+      };
+
+    case "completed":
+      return {
+        backgroundColor: "#ECFDF5",
+        textColor: "#16A34A",
+      };
+
+    case "cancelled":
+      return {
+        backgroundColor: "#FEF2F2",
+        textColor: "#DC2626",
+      };
+
+    default:
+      return {
+        backgroundColor: "#F1F5F9",
+        textColor: "#64748B",
+      };
+  }
+};
+
+const getApplicationStatusColors = (status: ApplicationStatus) => {
+  switch (status) {
+    case "pending":
+      return {
+        backgroundColor: "#FFF7ED",
+        textColor: "#D97706",
+      };
+
+    case "accepted":
+      return {
+        backgroundColor: "#ECFDF5",
+        textColor: "#16A34A",
+      };
+
+    case "rejected":
+      return {
+        backgroundColor: "#FEF2F2",
+        textColor: "#DC2626",
+      };
+
+    default:
+      return {
+        backgroundColor: "#F1F5F9",
+        textColor: "#64748B",
+      };
+  }
 };
 
 export default function MyJobsScreen() {
@@ -191,47 +276,75 @@ export default function MyJobsScreen() {
               </Text>
             </View>
           ) : (
-            jobs.map((job) => (
-              <TouchableOpacity
-                key={job._id}
-                style={styles.jobCard}
-                activeOpacity={0.85}
-                onPress={() =>
-                  router.push({
-                    pathname: "/job/[id]",
-                    params: { id: job._id },
-                  })
-                }
-              >
-                <View style={styles.topRow}>
-                  <View style={styles.categoryBadge}>
-                    <Text style={styles.categoryText}>{job.category}</Text>
+            jobs.map((job) => {
+              const statusColors = getJobStatusColors(job.status);
+
+              return (
+                <TouchableOpacity
+                  key={job._id}
+                  style={styles.jobCard}
+                  activeOpacity={0.85}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/job/[id]",
+                      params: {
+                        id: job._id,
+                      },
+                    })
+                  }
+                >
+                  <View style={styles.topRow}>
+                    <View style={styles.categoryBadge}>
+                      <Text style={styles.categoryText}>{job.category}</Text>
+                    </View>
+
+                    <Text style={styles.price}>{job.budget} zł</Text>
                   </View>
 
-                  <Text style={styles.price}>{job.budget} zł</Text>
-                </View>
+                  <Text style={styles.jobTitle}>{job.title}</Text>
 
-                <Text style={styles.jobTitle}>{job.title}</Text>
+                  <Text style={styles.description} numberOfLines={2}>
+                    {job.description}
+                  </Text>
 
-                <Text style={styles.description} numberOfLines={2}>
-                  {job.description}
-                </Text>
-
-                <View style={styles.bottomRow}>
-                  <View style={styles.locationRow}>
-                    <Ionicons
-                      name="location-outline"
-                      size={17}
-                      color="#64748B"
-                    />
-
-                    <Text style={styles.location}>{job.city}</Text>
+                  <View style={styles.statusRow}>
+                    <View
+                      style={[
+                        styles.jobStatusBadge,
+                        {
+                          backgroundColor: statusColors.backgroundColor,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.jobStatusText,
+                          {
+                            color: statusColors.textColor,
+                          },
+                        ]}
+                      >
+                        {jobStatusLabels[job.status]}
+                      </Text>
+                    </View>
                   </View>
 
-                  <Text style={styles.detailsText}>Szczegóły</Text>
-                </View>
-              </TouchableOpacity>
-            ))
+                  <View style={styles.bottomRow}>
+                    <View style={styles.locationRow}>
+                      <Ionicons
+                        name="location-outline"
+                        size={17}
+                        color="#64748B"
+                      />
+
+                      <Text style={styles.location}>{job.city}</Text>
+                    </View>
+
+                    <Text style={styles.detailsText}>Szczegóły</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
           )}
         </ScrollView>
       ) : (
@@ -250,54 +363,105 @@ export default function MyJobsScreen() {
               </Text>
             </View>
           ) : (
-            applications.map((application) => (
-              <TouchableOpacity
-                key={application._id}
-                style={styles.jobCard}
-                activeOpacity={0.85}
-                onPress={() =>
-                  router.push({
-                    pathname: "/job/[id]",
-                    params: { id: application.job._id },
-                  })
-                }
-              >
-                <View style={styles.topRow}>
-                  <View style={styles.categoryBadge}>
-                    <Text style={styles.categoryText}>
-                      {application.job.category}
+            applications.map((application) => {
+              const applicationColors = getApplicationStatusColors(
+                application.status,
+              );
+
+              const jobColors = getJobStatusColors(application.job.status);
+
+              return (
+                <TouchableOpacity
+                  key={application._id}
+                  style={styles.jobCard}
+                  activeOpacity={0.85}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/job/[id]",
+                      params: {
+                        id: application.job._id,
+                      },
+                    })
+                  }
+                >
+                  <View style={styles.topRow}>
+                    <View style={styles.categoryBadge}>
+                      <Text style={styles.categoryText}>
+                        {application.job.category}
+                      </Text>
+                    </View>
+
+                    <Text style={styles.price}>
+                      {application.job.budget} zł
                     </Text>
                   </View>
 
-                  <Text style={styles.price}>{application.job.budget} zł</Text>
-                </View>
+                  <Text style={styles.jobTitle}>{application.job.title}</Text>
 
-                <Text style={styles.jobTitle}>{application.job.title}</Text>
+                  <Text style={styles.description} numberOfLines={2}>
+                    {application.job.description}
+                  </Text>
 
-                <Text style={styles.description} numberOfLines={2}>
-                  {application.job.description}
-                </Text>
+                  <View style={styles.statusesRow}>
+                    <View
+                      style={[
+                        styles.applicationStatusBadge,
+                        {
+                          backgroundColor: applicationColors.backgroundColor,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.applicationStatusText,
+                          {
+                            color: applicationColors.textColor,
+                          },
+                        ]}
+                      >
+                        {applicationStatusLabels[application.status]}
+                      </Text>
+                    </View>
 
-                <View style={styles.bottomRow}>
-                  <View style={styles.locationRow}>
-                    <Ionicons
-                      name="location-outline"
-                      size={17}
-                      color="#64748B"
-                    />
-
-                    <Text style={styles.location}>{application.job.city}</Text>
+                    <View
+                      style={[
+                        styles.jobStatusBadge,
+                        {
+                          backgroundColor: jobColors.backgroundColor,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.jobStatusText,
+                          {
+                            color: jobColors.textColor,
+                          },
+                        ]}
+                      >
+                        {jobStatusLabels[application.job.status]}
+                      </Text>
+                    </View>
                   </View>
 
-                  <View style={styles.applicationStatusBadge}>
-                    <Text style={styles.applicationStatusText}>
-                      {applicationStatusLabels[application.status] ??
-                        application.status}
-                    </Text>
+                  <View style={styles.bottomRow}>
+                    <View style={styles.locationRow}>
+                      <Ionicons
+                        name="location-outline"
+                        size={17}
+                        color="#64748B"
+                      />
+
+                      <Text style={styles.location}>
+                        {application.job.city}
+                      </Text>
+                    </View>
+
+                    <Text style={styles.detailsText}>Szczegóły</Text>
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))
+                </TouchableOpacity>
+              );
+            })
           )}
         </ScrollView>
       )}
@@ -436,6 +600,42 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
 
+  statusRow: {
+    marginTop: 14,
+    flexDirection: "row",
+  },
+
+  statusesRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  jobStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    alignSelf: "flex-start",
+  },
+
+  jobStatusText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  applicationStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    alignSelf: "flex-start",
+  },
+
+  applicationStatusText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
   bottomRow: {
     marginTop: 16,
     flexDirection: "row",
@@ -458,19 +658,6 @@ const styles = StyleSheet.create({
   detailsText: {
     fontSize: 14,
     fontWeight: "800",
-    color: "#2563EB",
-  },
-
-  applicationStatusBadge: {
-    backgroundColor: "#EFF6FF",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-
-  applicationStatusText: {
-    fontSize: 12,
-    fontWeight: "700",
     color: "#2563EB",
   },
 });
