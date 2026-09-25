@@ -32,6 +32,7 @@ type Job = {
   category: string;
   city: string;
   budget: number;
+  images?: string[];
   status: "open" | "assigned" | "in_progress" | "completed" | "cancelled";
   completionRequested: boolean;
   author: UserData;
@@ -716,7 +717,6 @@ export default function JobDetailsScreen() {
   }
 
   const isOwner = job.author?._id === currentUserId;
-
   const isAssignedWorker = job.assignedTo?._id === currentUserId;
 
   return (
@@ -805,6 +805,28 @@ export default function JobDetailsScreen() {
             </Text>
           </View>
         </View>
+
+        {job.images && job.images.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Zdjęcia</Text>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.imagesGallery}
+            >
+              {job.images.map((imageUrl, index) => (
+                <Image
+                  key={`${imageUrl}-${index}`}
+                  source={{
+                    uri: imageUrl,
+                  }}
+                  style={styles.jobImage}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Opis zlecenia</Text>
@@ -1409,6 +1431,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#2563EB",
+  },
+
+  imagesGallery: {
+    gap: 12,
+    paddingRight: 24,
+  },
+
+  jobImage: {
+    width: 260,
+    height: 190,
+    borderRadius: 18,
+    backgroundColor: "#E2E8F0",
   },
 
   section: {

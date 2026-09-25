@@ -4,11 +4,36 @@ import Job from "../models/Job";
 
 export const createJob = async (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, category, city, budget } = req.body;
+    const {
+      title,
+      description,
+      category,
+      city,
+      budget,
+      images = [],
+    } = req.body;
 
     if (!title || !description || !category || !city || budget === undefined) {
       return res.status(400).json({
         message: "Uzupełnij wszystkie wymagane pola.",
+      });
+    }
+
+    if (!Array.isArray(images)) {
+      return res.status(400).json({
+        message: "Zdjęcia muszą być przesłane jako tablica.",
+      });
+    }
+
+    if (images.length > 5) {
+      return res.status(400).json({
+        message: "Możesz dodać maksymalnie 5 zdjęć.",
+      });
+    }
+
+    if (!images.every((image) => typeof image === "string")) {
+      return res.status(400).json({
+        message: "Nieprawidłowy format zdjęć.",
       });
     }
 
@@ -18,6 +43,7 @@ export const createJob = async (req: AuthRequest, res: Response) => {
       category,
       city,
       budget,
+      images,
       author: req.userId,
     });
 
@@ -121,7 +147,7 @@ export const updateJob = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const { title, description, category, city, budget } = req.body;
+    const { title, description, category, city, budget, images } = req.body;
 
     if (title !== undefined) {
       job.title = title;
@@ -141,6 +167,28 @@ export const updateJob = async (req: AuthRequest, res: Response) => {
 
     if (budget !== undefined) {
       job.budget = budget;
+    }
+
+    if (images !== undefined) {
+      if (!Array.isArray(images)) {
+        return res.status(400).json({
+          message: "Zdjęcia muszą być przesłane jako tablica.",
+        });
+      }
+
+      if (images.length > 5) {
+        return res.status(400).json({
+          message: "Możesz dodać maksymalnie 5 zdjęć.",
+        });
+      }
+
+      if (!images.every((image) => typeof image === "string")) {
+        return res.status(400).json({
+          message: "Nieprawidłowy format zdjęć.",
+        });
+      }
+
+      job.images = images;
     }
 
     await job.save();
