@@ -818,9 +818,7 @@ export default function JobDetailsScreen() {
               {job.images.map((imageUrl, index) => (
                 <Image
                   key={`${imageUrl}-${index}`}
-                  source={{
-                    uri: imageUrl,
-                  }}
+                  source={{ uri: imageUrl }}
                   style={styles.jobImage}
                 />
               ))}
@@ -852,9 +850,7 @@ export default function JobDetailsScreen() {
           >
             {job.author?.avatar ? (
               <Image
-                source={{
-                  uri: job.author.avatar,
-                }}
+                source={{ uri: job.author.avatar }}
                 style={styles.avatar}
               />
             ) : (
@@ -919,6 +915,42 @@ export default function JobDetailsScreen() {
             </Pressable>
           </View>
         )}
+
+        {job.assignedTo &&
+          job.status !== "open" &&
+          (isOwner || isAssignedWorker) && (
+            <View style={styles.chatSection}>
+              <Pressable
+                style={styles.chatButton}
+                onPress={() =>
+                  router.push({
+                    pathname: "/job/chat/[id]",
+                    params: {
+                      id: job._id,
+                    },
+                  })
+                }
+              >
+                <View style={styles.chatIcon}>
+                  <Ionicons
+                    name="chatbubble-ellipses-outline"
+                    size={23}
+                    color="#2563EB"
+                  />
+                </View>
+
+                <View style={styles.chatButtonContent}>
+                  <Text style={styles.chatButtonTitle}>Otwórz czat</Text>
+
+                  <Text style={styles.chatButtonSubtitle}>
+                    Napisz wiadomość dotyczącą tego zlecenia
+                  </Text>
+                </View>
+
+                <Ionicons name="chevron-forward" size={21} color="#94A3B8" />
+              </Pressable>
+            </View>
+          )}
 
         {isOwner && job.status === "open" && applications.length > 0 && (
           <View style={styles.section}>
@@ -1506,6 +1538,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#64748B",
     marginTop: 4,
+  },
+
+  chatSection: {
+    marginTop: 18,
+  },
+
+  chatButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+  },
+
+  chatIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  chatButtonContent: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+
+  chatButtonTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+
+  chatButtonSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#64748B",
   },
 
   applicationCard: {

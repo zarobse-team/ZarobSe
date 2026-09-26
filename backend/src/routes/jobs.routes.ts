@@ -21,6 +21,12 @@ import {
   updateJob,
 } from "../controllers/jobs.controller";
 
+import {
+  getJobMessages,
+  markJobMessagesAsRead,
+  sendJobMessage,
+} from "../controllers/chat.controller";
+
 import { cancelJob } from "../controllers/jobStatus.controller";
 
 import { authMiddleware } from "../middleware/auth.middleware";
@@ -36,6 +42,12 @@ router.get("/applications/my", authMiddleware, getMyApplications);
 router.get("/:id/applications", authMiddleware, getApplicationsForJob);
 
 router.get("/:id/application", authMiddleware, getMyApplicationForJob);
+
+router.get("/:id/messages", authMiddleware, getJobMessages);
+
+router.post("/:id/messages", authMiddleware, sendJobMessage);
+
+router.patch("/:id/messages/read", authMiddleware, markJobMessagesAsRead);
 
 router.get("/:id", authMiddleware, getJobById);
 
