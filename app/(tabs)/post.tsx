@@ -42,6 +42,11 @@ type LocationSuggestion = {
 	type: string;
 };
 
+type StreetSuggestion = {
+	name: string;
+	fullName: string;
+};
+
 export default function PostJobScreen() {
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");
@@ -53,6 +58,14 @@ export default function PostJobScreen() {
 		[],
 	);
 	const [citySearchLoading, setCitySearchLoading] = useState(false);
+	const [citySelected, setCitySelected] = useState(false);
+
+	const [streetSuggestions, setStreetSuggestions] = useState<
+		StreetSuggestion[]
+	>([]);
+	const [streetSearchLoading, setStreetSearchLoading] = useState(false);
+	const [streetSelected, setStreetSelected] = useState(false);
+
 	const [budget, setBudget] = useState("");
 	const [images, setImages] = useState<SelectedImage[]>([]);
 	const [loading, setLoading] = useState(false);
@@ -62,6 +75,11 @@ export default function PostJobScreen() {
 	const uploadPreset = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 	useEffect(() => {
+		if (citySelected) {
+			setCitySuggestions([]);
+			return;
+		}
+
 		const query = city.trim();
 
 		if (query.length < 3) {
@@ -93,7 +111,49 @@ export default function PostJobScreen() {
 		}, 400);
 
 		return () => clearTimeout(timeout);
-	}, [city]);
+	}, [city, citySelected]);
+
+	useEffect(() => {
+		if (!citySelected || streetSelected) {
+			setStreetSuggestions([]);
+			return;
+		}
+
+		const normalizedCity = city.trim();
+		const query = street.trim();
+
+		if (!normalizedCity || query.length < 2) {
+			setStreetSuggestions([]);
+			return;
+		}
+
+		const timeout = setTimeout(async () => {
+			try {
+				setStreetSearchLoading(true);
+
+				const response = await fetch(
+					`${API_URL}/api/location/streets?city=${encodeURIComponent(
+						normalizedCity,
+					)}&q=${encodeURIComponent(query)}`,
+				);
+
+				if (!response.ok) {
+					throw new Error("Nie udało się pobrać podpowiedzi ulic.");
+				}
+
+				const data: StreetSuggestion[] = await response.json();
+
+				setStreetSuggestions(data);
+			} catch (error) {
+				console.error("Street suggestions error:", error);
+				setStreetSuggestions([]);
+			} finally {
+				setStreetSearchLoading(false);
+			}
+		}, 400);
+
+		return () => clearTimeout(timeout);
+	}, [city, street, citySelected, streetSelected]);
 
 	const openCategoryModal = () => {
 		Keyboard.dismiss();
@@ -357,7 +417,13 @@ export default function PostJobScreen() {
 			setCategory("");
 			setCategoryOpen(false);
 			setCity("");
+			setCitySelected(false);
+			setCitySuggestions([]);
+
 			setStreet("");
+			setStreetSelected(false);
+			setStreetSuggestions([]);
+
 			setBudget("");
 			setImages([]);
 
@@ -521,7 +587,14 @@ export default function PostJobScreen() {
 
 						<TextInput
 							value={city}
-							onChangeText={setCity}
+							onChangeText={(text) => {
+								setCitySelected(false);
+								setCity(text);
+
+								setStreet("");
+								setStreetSelected(false);
+								setStreetSuggestions([]);
+							}}
 							placeholder='Np. Kraków'
 							placeholderTextColor='#9CA3AF'
 							style={styles.input}
@@ -540,6 +613,7 @@ export default function PostJobScreen() {
 										key={`${item.name}-${index}`}
 										style={styles.suggestionItem}
 										onPress={() => {
+											setCitySelected(true);
 											setCity(item.name);
 											setCitySuggestions([]);
 											Keyboard.dismiss();
@@ -562,12 +636,44 @@ export default function PostJobScreen() {
 
 						<TextInput
 							value={street}
-							onChangeText={setStreet}
+							onChangeText={(text) => {
+								setStreetSelected(false);
+								setStreet(text);
+							}}
 							placeholder='Np. Długa'
 							placeholderTextColor='#9CA3AF'
 							style={styles.input}
 							maxLength={100}
+							autoCorrect={false}
 						/>
+
+						{streetSearchLoading && (
+							<ActivityIndicator size='small' style={styles.locationLoader} />
+						)}
+
+						{streetSuggestions.length > 0 && (
+							<View style={styles.suggestionsContainer}>
+								{streetSuggestions.map((item, index) => (
+									<Pressable
+										key={`${item.name}-${index}`}
+										style={styles.suggestionItem}
+										onPress={() => {
+											setStreetSelected(true);
+											setStreet(item.name);
+											setStreetSuggestions([]);
+											Keyboard.dismiss();
+										}}>
+										<Ionicons
+											name='navigate-outline'
+											size={18}
+											color='#2563EB'
+										/>
+
+										<Text style={styles.suggestionText}>{item.fullName}</Text>
+									</Pressable>
+								))}
+							</View>
+						)}
 					</View>
 
 					<View style={styles.card}>
