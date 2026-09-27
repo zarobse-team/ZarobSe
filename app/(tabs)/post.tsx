@@ -4,7 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { fetch as expoFetch } from "expo/fetch";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
 	ActivityIndicator,
@@ -33,6 +33,15 @@ type SelectedImage = {
 	uri: string;
 };
 
+type LocationSuggestion = {
+	name: string;
+	city: string;
+	street: string;
+	latitude: number;
+	longitude: number;
+	type: string;
+};
+
 export default function PostJobScreen() {
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");
@@ -40,6 +49,10 @@ export default function PostJobScreen() {
 	const [categoryOpen, setCategoryOpen] = useState(false);
 	const [city, setCity] = useState("");
 	const [street, setStreet] = useState("");
+	const [citySuggestions, setCitySuggestions] = useState<LocationSuggestion[]>(
+		[],
+	);
+	const [citySearchLoading, setCitySearchLoading] = useState(false);
 	const [budget, setBudget] = useState("");
 	const [images, setImages] = useState<SelectedImage[]>([]);
 	const [loading, setLoading] = useState(false);
@@ -47,6 +60,46 @@ export default function PostJobScreen() {
 	const cloudName = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
 
 	const uploadPreset = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+	useEffect(() => {
+		const query = city.trim();
+
+		if (query.length < 3) {
+			setCitySuggestions([]);
+			return;
+		}
+
+		const timeout = setTimeout(async () => {
+			try {
+				setCitySearchLoading(true);
+
+				const response = await fetch(
+					`${API_URL}/api/location/cities?q=${encodeURIComponent(query)}`,
+				);
+
+				if (!response.ok) {
+					throw new Error("Nie udało się pobrać podpowiedzi.");
+				}
+
+				const data: LocationSuggestion[] = await response.json();
+
+				const uniqueCities = Array.from(
+					new Map(
+						data.filter((item) => item.city).map((item) => [item.city, item]),
+					).values(),
+				);
+
+				setCitySuggestions(uniqueCities);
+			} catch (error) {
+				console.error("City suggestions error:", error);
+				setCitySuggestions([]);
+			} finally {
+				setCitySearchLoading(false);
+			}
+		}, 400);
+
+		return () => clearTimeout(timeout);
+	}, [city]);
 
 	const openCategoryModal = () => {
 		Keyboard.dismiss();
@@ -479,7 +532,35 @@ export default function PostJobScreen() {
 							placeholderTextColor='#9CA3AF'
 							style={styles.input}
 							maxLength={80}
+							autoCorrect={false}
 						/>
+
+						{citySearchLoading && (
+							<ActivityIndicator size='small' style={styles.locationLoader} />
+						)}
+
+						{citySuggestions.length > 0 && (
+							<View style={styles.suggestionsContainer}>
+								{citySuggestions.map((item, index) => (
+									<Pressable
+										key={`${item.city}-${index}`}
+										style={styles.suggestionItem}
+										onPress={() => {
+											setCity(item.city);
+											setCitySuggestions([]);
+											Keyboard.dismiss();
+										}}>
+										<Ionicons
+											name='location-outline'
+											size={18}
+											color='#2563EB'
+										/>
+
+										<Text style={styles.suggestionText}>{item.city}</Text>
+									</Pressable>
+								))}
+							</View>
+						)}
 					</View>
 
 					<View style={styles.card}>
@@ -674,6 +755,30 @@ const styles = StyleSheet.create({
 		fontSize: 16,
 		color: "#1F2937",
 		minHeight: 26,
+	},
+	locationLoader: {
+		marginTop: 12,
+	},
+
+	suggestionsContainer: {
+		marginTop: 12,
+		borderTopWidth: 1,
+		borderTopColor: "#E5E7EB",
+	},
+
+	suggestionItem: {
+		minHeight: 48,
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 10,
+		borderBottomWidth: 1,
+		borderBottomColor: "#F1F5F9",
+	},
+
+	suggestionText: {
+		fontSize: 15,
+		color: "#1F2937",
+		fontWeight: "500",
 	},
 
 	descriptionInput: {

@@ -54,14 +54,19 @@ export const createJob = async (req: AuthRequest, res: Response) => {
 			});
 		}
 
-		const { latitude, longitude } = locations[0];
+		const {
+			city: normalizedCity,
+			street: normalizedStreet,
+			latitude,
+			longitude,
+		} = locations[0];
 
 		const job = await Job.create({
 			title,
 			description,
 			category,
-			city,
-			street,
+			city: normalizedCity || city,
+			street: normalizedStreet || street,
 			latitude,
 			longitude,
 			budget,

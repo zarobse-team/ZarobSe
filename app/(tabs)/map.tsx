@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { useRef, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import * as SecureStore from "expo-secure-store";
+import { useCallback, useRef, useState } from "react";
 import {
 	ActivityIndicator,
 	Alert,
@@ -25,9 +27,21 @@ const KRAKOW_REGION = {
 
 type LocationSearchResult = {
 	name: string;
+	city: string;
+	street: string;
 	latitude: number;
 	longitude: number;
 	type: string;
+};
+
+type Job = {
+	_id: string;
+	title: string;
+	city: string;
+	street?: string;
+	budget: number;
+	latitude?: number | null;
+	longitude?: number | null;
 };
 
 export default function MapScreen() {
@@ -37,6 +51,39 @@ export default function MapScreen() {
 	const [search, setSearch] = useState("");
 	const [searchLoading, setSearchLoading] = useState(false);
 	const [locationLoading, setLocationLoading] = useState(false);
+	const [jobs, setJobs] = useState<Job[]>([]);
+
+	useFocusEffect(
+		useCallback(() => {
+			const fetchJobs = async () => {
+				try {
+					const token = await SecureStore.getItemAsync("token");
+
+					if (!token) {
+						throw new Error("Brak tokenu użytkownika.");
+					}
+
+					const response = await fetch(`${API_URL}/api/jobs`, {
+						headers: {
+							Authorization: `Bearer ${token}`,
+						},
+					});
+
+					if (!response.ok) {
+						throw new Error("Nie udało się pobrać zleceń.");
+					}
+
+					const data: Job[] = await response.json();
+
+					setJobs(data);
+				} catch (error) {
+					console.error("Get map jobs error:", error);
+				}
+			};
+
+			fetchJobs();
+		}, []),
+	);
 
 	// WYSZUKIWANIE MIEJSCOWOŚCI
 	const handleSearch = async () => {
@@ -66,6 +113,14 @@ export default function MapScreen() {
 			}
 
 			const place = results[0];
+
+			if (place.city && place.street) {
+				setSearch(`${place.city}, ${place.street}`);
+			} else if (place.city) {
+				setSearch(place.city);
+			} else {
+				setSearch(place.name);
+			}
 
 			mapRef.current?.animateToRegion(
 				{
@@ -143,18 +198,29 @@ export default function MapScreen() {
 				showsUserLocation
 				toolbarEnabled={false}
 				onPress={() => Keyboard.dismiss()}>
-				{/* TESTOWA PINEZKA */}
-				<Marker
-					coordinate={{
-						latitude: 50.0647,
-						longitude: 19.945,
-					}}
-					title='Montaż szafki'
-					description='150 zł • Kraków'>
-					<View style={styles.marker}>
-						<Ionicons name='briefcase' size={18} color='#FFFFFF' />
-					</View>
-				</Marker>
+				{jobs
+					.filter(
+						(job) =>
+							typeof job.latitude === "number" &&
+							typeof job.longitude === "number",
+					)
+					.map((job) => (
+						<Marker
+							key={job._id}
+							coordinate={{
+								latitude: job.latitude!,
+								longitude: job.longitude!,
+							}}
+							title={job.title}
+							description={`${job.budget} zł • ${job.city}${
+								job.street ? `, ${job.street}` : ""
+							}`}
+							onCalloutPress={() => router.push(`/job/${job._id}`)}>
+							<View style={styles.marker}>
+								<Ionicons name='briefcase' size={18} color='#FFFFFF' />
+							</View>
+						</Marker>
+					))}
 			</MapView>
 
 			{/* GÓRNY PANEL */}
