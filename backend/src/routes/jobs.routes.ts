@@ -27,6 +27,11 @@ import {
   sendJobMessage,
 } from "../controllers/chat.controller";
 
+import {
+  createReview,
+  getMyReviewForJob,
+} from "../controllers/reviews.controller";
+
 import { cancelJob } from "../controllers/jobStatus.controller";
 
 import { authMiddleware } from "../middleware/auth.middleware";
@@ -48,6 +53,10 @@ router.get("/:id/messages", authMiddleware, getJobMessages);
 router.post("/:id/messages", authMiddleware, sendJobMessage);
 
 router.patch("/:id/messages/read", authMiddleware, markJobMessagesAsRead);
+
+router.post("/:id/reviews", authMiddleware, createReview);
+
+router.get("/:id/review", authMiddleware, getMyReviewForJob);
 
 router.get("/:id", authMiddleware, getJobById);
 
