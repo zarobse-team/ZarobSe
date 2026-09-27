@@ -83,13 +83,7 @@ export default function PostJobScreen() {
 
 				const data: LocationSuggestion[] = await response.json();
 
-				const uniqueCities = Array.from(
-					new Map(
-						data.filter((item) => item.city).map((item) => [item.city, item]),
-					).values(),
-				);
-
-				setCitySuggestions(uniqueCities);
+				setCitySuggestions(data);
 			} catch (error) {
 				console.error("City suggestions error:", error);
 				setCitySuggestions([]);
@@ -543,10 +537,10 @@ export default function PostJobScreen() {
 							<View style={styles.suggestionsContainer}>
 								{citySuggestions.map((item, index) => (
 									<Pressable
-										key={`${item.city}-${index}`}
+										key={`${item.name}-${index}`}
 										style={styles.suggestionItem}
 										onPress={() => {
-											setCity(item.city);
+											setCity(item.name);
 											setCitySuggestions([]);
 											Keyboard.dismiss();
 										}}>
@@ -556,7 +550,7 @@ export default function PostJobScreen() {
 											color='#2563EB'
 										/>
 
-										<Text style={styles.suggestionText}>{item.city}</Text>
+										<Text style={styles.suggestionText}>{item.name}</Text>
 									</Pressable>
 								))}
 							</View>
