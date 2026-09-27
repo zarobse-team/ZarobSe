@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useCallback, useState } from "react";
+
 import {
   ActivityIndicator,
   Alert,
@@ -12,6 +13,7 @@ import {
   Text,
   View,
 } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { API_URL } from "../../constants/api";
@@ -32,6 +34,7 @@ type Job = {
   category: string;
   city: string;
   budget: number;
+  images?: string[];
   status: "open" | "assigned" | "in_progress" | "completed" | "cancelled";
   completionRequested: boolean;
   author: UserData;
@@ -57,6 +60,15 @@ type JobApplication = {
   status: "pending" | "accepted" | "rejected";
   applicant: UserData;
   createdAt: string;
+};
+
+type ReviewStatusResponse = {
+  reviewed: boolean;
+  review: {
+    _id: string;
+    rating: number;
+    comment?: string;
+  } | null;
 };
 
 const statusLabels: Record<string, string> = {
@@ -95,6 +107,8 @@ export default function JobDetailsScreen() {
   const [requestingCompletion, setRequestingCompletion] = useState(false);
   const [completingJob, setCompletingJob] = useState(false);
   const [cancellingJob, setCancellingJob] = useState(false);
+
+  const [hasReviewed, setHasReviewed] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -141,6 +155,36 @@ export default function JobDetailsScreen() {
 
       const isOwner = jobData.author?._id === userData._id;
 
+      const isAssignedWorker = jobData.assignedTo?._id === userData._id;
+
+      if (jobData.status === "completed" && (isOwner || isAssignedWorker)) {
+        try {
+          const reviewResponse = await fetch(
+            `${API_URL}/api/jobs/${id}/review`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+          );
+
+          if (reviewResponse.ok) {
+            const reviewData =
+              (await reviewResponse.json()) as ReviewStatusResponse;
+
+            setHasReviewed(reviewData.reviewed);
+          } else {
+            setHasReviewed(false);
+          }
+        } catch (error) {
+          console.error("Fetch review status error:", error);
+
+          setHasReviewed(false);
+        }
+      } else {
+        setHasReviewed(false);
+      }
+
       if (isOwner) {
         setHasApplied(false);
         setApplicationStatus(null);
@@ -178,6 +222,7 @@ export default function JobDetailsScreen() {
 
         if (applicationResponse.ok) {
           setHasApplied(applicationData.applied);
+
           setApplicationStatus(applicationData.application?.status ?? null);
         }
       }
@@ -719,6 +764,8 @@ export default function JobDetailsScreen() {
 
   const isAssignedWorker = job.assignedTo?._id === currentUserId;
 
+  const isJobParticipant = isOwner || isAssignedWorker;
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <ScrollView
@@ -805,6 +852,28 @@ export default function JobDetailsScreen() {
             </Text>
           </View>
         </View>
+
+        {job.images && job.images.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Zdjęcia</Text>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.imagesGallery}
+            >
+              {job.images.map((imageUrl, index) => (
+                <Image
+                  key={`${imageUrl}-${index}`}
+                  source={{
+                    uri: imageUrl,
+                  }}
+                  style={styles.jobImage}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Opis zlecenia</Text>
@@ -894,6 +963,40 @@ export default function JobDetailsScreen() {
               </View>
 
               <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </Pressable>
+          </View>
+        )}
+
+        {job.assignedTo && job.status !== "open" && isJobParticipant && (
+          <View style={styles.chatSection}>
+            <Pressable
+              style={styles.chatButton}
+              onPress={() =>
+                router.push({
+                  pathname: "/job/chat/[id]",
+                  params: {
+                    id: job._id,
+                  },
+                })
+              }
+            >
+              <View style={styles.chatIcon}>
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={23}
+                  color="#2563EB"
+                />
+              </View>
+
+              <View style={styles.chatButtonContent}>
+                <Text style={styles.chatButtonTitle}>Otwórz czat</Text>
+
+                <Text style={styles.chatButtonSubtitle}>
+                  Napisz wiadomość dotyczącą tego zlecenia
+                </Text>
+              </View>
+
+              <Ionicons name="chevron-forward" size={21} color="#94A3B8" />
             </Pressable>
           </View>
         )}
@@ -1165,6 +1268,46 @@ export default function JobDetailsScreen() {
           </View>
         )}
 
+        {job.status === "completed" && isJobParticipant && (
+          <View style={styles.reviewSection}>
+            <Pressable
+              style={styles.reviewButton}
+              onPress={() =>
+                router.push({
+                  pathname: "/job/review/[id]",
+                  params: {
+                    id: job._id,
+                  },
+                })
+              }
+            >
+              <View style={styles.reviewIcon}>
+                <Ionicons
+                  name={hasReviewed ? "star" : "star-outline"}
+                  size={24}
+                  color="#F59E0B"
+                />
+              </View>
+
+              <View style={styles.reviewButtonContent}>
+                <Text style={styles.reviewButtonTitle}>
+                  {hasReviewed ? "Zobacz swoją opinię" : "Wystaw opinię"}
+                </Text>
+
+                <Text style={styles.reviewButtonSubtitle}>
+                  {hasReviewed
+                    ? "Opinia dla tego zlecenia została już wystawiona"
+                    : isOwner
+                      ? "Oceń współpracę z wykonawcą"
+                      : "Oceń współpracę ze zleceniodawcą"}
+                </Text>
+              </View>
+
+              <Ionicons name="chevron-forward" size={21} color="#94A3B8" />
+            </Pressable>
+          </View>
+        )}
+
         {!isOwner && (
           <View style={styles.applicationSection}>
             {hasApplied && applicationStatus === "pending" && (
@@ -1411,6 +1554,18 @@ const styles = StyleSheet.create({
     color: "#2563EB",
   },
 
+  imagesGallery: {
+    gap: 12,
+    paddingRight: 24,
+  },
+
+  jobImage: {
+    width: 260,
+    height: 190,
+    borderRadius: 18,
+    backgroundColor: "#E2E8F0",
+  },
+
   section: {
     marginTop: 30,
   },
@@ -1472,6 +1627,90 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#64748B",
     marginTop: 4,
+  },
+
+  chatSection: {
+    marginTop: 18,
+  },
+
+  chatButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+  },
+
+  chatIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  chatButtonContent: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+
+  chatButtonTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+
+  chatButtonSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#64748B",
+  },
+
+  reviewSection: {
+    marginTop: 18,
+  },
+
+  reviewButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+
+  reviewIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "#FFFBEB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  reviewButtonContent: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+
+  reviewButtonTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+
+  reviewButtonSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#64748B",
   },
 
   applicationCard: {

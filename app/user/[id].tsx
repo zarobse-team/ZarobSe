@@ -32,10 +32,42 @@ type PublicUser = {
   };
 };
 
+type ReviewUser = {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  avatar?: string;
+};
+
+type ReviewJob = {
+  _id: string;
+  title: string;
+};
+
+type Review = {
+  _id: string;
+  rating: number;
+  comment?: string;
+  reviewer: ReviewUser;
+  job?: ReviewJob;
+  createdAt: string;
+};
+
+type ReviewsResponse = {
+  reviews: Review[];
+  averageRating: number;
+  reviewsCount: number;
+};
+
 export default function PublicUserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [user, setUser] = useState<PublicUser | null>(null);
+
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [averageRating, setAverageRating] = useState(0);
+  const [reviewsCount, setReviewsCount] = useState(0);
+
   const [loading, setLoading] = useState(true);
 
   const fetchUser = async () => {
@@ -49,29 +81,54 @@ export default function PublicUserProfileScreen() {
         return;
       }
 
-      const response = await fetch(`${API_URL}/api/users/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const [userResponse, reviewsResponse] = await Promise.all([
+        fetch(`${API_URL}/api/users/${id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
 
-      let data;
+        fetch(`${API_URL}/api/users/${id}/reviews`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+      ]);
+
+      let userData;
+      let reviewsData: ReviewsResponse | null = null;
 
       try {
-        data = await response.json();
+        userData = await userResponse.json();
       } catch {
-        data = {};
+        userData = {};
       }
 
-      if (!response.ok) {
+      try {
+        reviewsData = await reviewsResponse.json();
+      } catch {
+        reviewsData = null;
+      }
+
+      if (!userResponse.ok) {
         Alert.alert(
           "Błąd",
-          data.message || "Nie udało się pobrać profilu użytkownika.",
+          userData.message || "Nie udało się pobrać profilu użytkownika.",
         );
         return;
       }
 
-      setUser(data);
+      setUser(userData);
+
+      if (reviewsResponse.ok && reviewsData) {
+        setReviews(reviewsData.reviews ?? []);
+        setAverageRating(reviewsData.averageRating ?? 0);
+        setReviewsCount(reviewsData.reviewsCount ?? 0);
+      } else {
+        setReviews([]);
+        setAverageRating(0);
+        setReviewsCount(0);
+      }
     } catch (error) {
       console.error("Public user profile error:", error);
 
@@ -86,6 +143,14 @@ export default function PublicUserProfileScreen() {
       fetchUser();
     }
   }, [id]);
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString("pl-PL", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
 
   if (loading) {
     return (
@@ -121,7 +186,12 @@ export default function PublicUserProfileScreen() {
 
         <View style={styles.profileCard}>
           {user.avatar ? (
-            <Image source={{ uri: user.avatar }} style={styles.avatar} />
+            <Image
+              source={{
+                uri: user.avatar,
+              }}
+              style={styles.avatar}
+            />
           ) : (
             <View style={styles.avatarPlaceholder}>
               <Ionicons name="person" size={46} color="#64748B" />
@@ -144,14 +214,12 @@ export default function PublicUserProfileScreen() {
             <Ionicons name="star" size={20} color="#F59E0B" />
 
             <Text style={styles.ratingText}>
-              {user.stats.rating !== null
-                ? user.stats.rating.toFixed(1)
-                : "Brak ocen"}
+              {reviewsCount > 0 ? averageRating.toFixed(1) : "Brak ocen"}
             </Text>
 
-            {user.stats.reviewsCount > 0 && (
+            {reviewsCount > 0 && (
               <Text style={styles.reviewsText}>
-                ({user.stats.reviewsCount} opinii)
+                ({reviewsCount} {reviewsCount === 1 ? "opinia" : "opinii"})
               </Text>
             )}
           </View>
@@ -184,19 +252,97 @@ export default function PublicUserProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Opinie</Text>
+          <View style={styles.reviewsHeader}>
+            <Text style={styles.sectionTitleNoMargin}>Opinie</Text>
 
-          <View style={styles.card}>
-            {user.stats.reviewsCount === 0 ? (
-              <Text style={styles.emptyText}>
-                Ten użytkownik nie ma jeszcze opinii.
-              </Text>
-            ) : (
-              <Text style={styles.emptyText}>
-                Opinie dodamy po wdrożeniu systemu ocen.
-              </Text>
+            {reviewsCount > 0 && (
+              <View style={styles.reviewsSummary}>
+                <Ionicons name="star" size={17} color="#F59E0B" />
+
+                <Text style={styles.reviewsSummaryText}>
+                  {averageRating.toFixed(1)}
+                </Text>
+
+                <Text style={styles.reviewsSummaryCount}>· {reviewsCount}</Text>
+              </View>
             )}
           </View>
+
+          {reviews.length === 0 ? (
+            <View style={styles.card}>
+              <View style={styles.emptyReviews}>
+                <Ionicons name="star-outline" size={34} color="#94A3B8" />
+
+                <Text style={styles.emptyText}>
+                  Ten użytkownik nie ma jeszcze opinii.
+                </Text>
+              </View>
+            </View>
+          ) : (
+            reviews.map((review) => (
+              <View key={review._id} style={styles.reviewCard}>
+                <View style={styles.reviewTopRow}>
+                  <View style={styles.reviewerRow}>
+                    {review.reviewer?.avatar ? (
+                      <Image
+                        source={{
+                          uri: review.reviewer.avatar,
+                        }}
+                        style={styles.reviewerAvatar}
+                      />
+                    ) : (
+                      <View style={styles.reviewerAvatarPlaceholder}>
+                        <Ionicons name="person" size={20} color="#64748B" />
+                      </View>
+                    )}
+
+                    <View style={styles.reviewerInfo}>
+                      <Text style={styles.reviewerName}>
+                        {review.reviewer?.firstName} {review.reviewer?.lastName}
+                      </Text>
+
+                      <Text style={styles.reviewDate}>
+                        {formatDate(review.createdAt)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.starsRow}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Ionicons
+                      key={star}
+                      name={star <= review.rating ? "star" : "star-outline"}
+                      size={19}
+                      color="#F59E0B"
+                    />
+                  ))}
+
+                  <Text style={styles.reviewRating}>{review.rating}/5</Text>
+                </View>
+
+                {review.comment?.trim() ? (
+                  <Text style={styles.reviewComment}>{review.comment}</Text>
+                ) : (
+                  <Text style={styles.noComment}>Bez komentarza</Text>
+                )}
+
+                {review.job?.title ? (
+                  <View style={styles.jobRow}>
+                    <Ionicons
+                      name="briefcase-outline"
+                      size={15}
+                      color="#64748B"
+                    />
+
+                    <Text style={styles.jobTitle} numberOfLines={1}>
+                      {review.job.title}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ))
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -332,6 +478,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
+  sectionTitleNoMargin: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1E2A5A",
+  },
+
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
@@ -344,8 +496,134 @@ const styles = StyleSheet.create({
     color: "#334155",
   },
 
+  reviewsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+
+  reviewsSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  reviewsSummaryText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1F2937",
+  },
+
+  reviewsSummaryCount: {
+    fontSize: 14,
+    color: "#64748B",
+  },
+
+  reviewCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 12,
+  },
+
+  reviewTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  reviewerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+
+  reviewerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+
+  reviewerAvatarPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  reviewerInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+
+  reviewerName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+
+  reviewDate: {
+    marginTop: 3,
+    fontSize: 12,
+    color: "#94A3B8",
+  },
+
+  starsRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+
+  reviewRating: {
+    marginLeft: 6,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+
+  reviewComment: {
+    marginTop: 12,
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#334155",
+  },
+
+  noComment: {
+    marginTop: 12,
+    fontSize: 14,
+    fontStyle: "italic",
+    color: "#94A3B8",
+  },
+
+  jobRow: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  jobTitle: {
+    flex: 1,
+    fontSize: 13,
+    color: "#64748B",
+  },
+
+  emptyReviews: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+
   emptyText: {
+    marginTop: 8,
     fontSize: 15,
     color: "#64748B",
+    textAlign: "center",
   },
 });

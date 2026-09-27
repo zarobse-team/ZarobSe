@@ -6,6 +6,7 @@ export interface IJob extends Document {
   category: string;
   city: string;
   budget: number;
+  images: string[];
   status: "open" | "assigned" | "in_progress" | "completed" | "cancelled";
   author: mongoose.Types.ObjectId;
   assignedTo?: mongoose.Types.ObjectId;
@@ -43,6 +44,14 @@ const jobSchema = new Schema<IJob>(
       type: Number,
       required: true,
       min: 0,
+    },
+    images: {
+      type: [String],
+      default: [],
+      validate: {
+        validator: (value: string[]) => value.length <= 5,
+        message: "Możesz dodać maksymalnie 5 zdjęć.",
+      },
     },
     status: {
       type: String,
