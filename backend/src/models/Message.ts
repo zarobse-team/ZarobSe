@@ -2,7 +2,14 @@ import mongoose, { Document, Schema } from "mongoose";
 
 export interface IMessage extends Document {
   job: mongoose.Types.ObjectId;
-  sender: mongoose.Types.ObjectId;
+  sender?: mongoose.Types.ObjectId;
+  type: "user" | "system";
+  eventKey?:
+    | "worker_selected"
+    | "work_started"
+    | "completion_requested"
+    | "job_completed"
+    | "job_cancelled";
   content: string;
   readAt?: Date | null;
   createdAt: Date;
@@ -21,7 +28,27 @@ const messageSchema = new Schema<IMessage>(
     sender: {
       type: Schema.Types.ObjectId,
       ref: "User",
+      required: function (this: IMessage) {
+        return this.type === "user";
+      },
+    },
+
+    type: {
+      type: String,
+      enum: ["user", "system"],
+      default: "user",
       required: true,
+    },
+
+    eventKey: {
+      type: String,
+      enum: [
+        "worker_selected",
+        "work_started",
+        "completion_requested",
+        "job_completed",
+        "job_cancelled",
+      ],
     },
 
     content: {
@@ -46,7 +73,19 @@ messageSchema.index({
   createdAt: 1,
 });
 
+messageSchema.index(
+  {
+    job: 1,
+    eventKey: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      eventKey: { $type: "string" },
+    },
+  },
+);
+
 const Message = mongoose.model<IMessage>("Message", messageSchema);
 
 export default Message;
- 

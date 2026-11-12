@@ -190,6 +190,7 @@ export const markJobMessagesAsRead = async (
         job: jobId,
         sender: {
           $ne: userId,
+          $exists: true,
         },
         readAt: null,
       },
