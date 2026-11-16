@@ -44,7 +44,14 @@ type CurrentUser = {
 };
 
 export default function JobChatScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, applicationId } = useLocalSearchParams<{
+    id: string;
+    applicationId?: string;
+  }>();
+
+  const messagesUrl = applicationId
+    ? `${API_URL}/api/jobs/applications/${applicationId}/messages`
+    : `${API_URL}/api/jobs/${id}/messages`;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
@@ -68,7 +75,7 @@ export default function JobChatScreen() {
         return;
       }
 
-      const response = await fetch(`${API_URL}/api/jobs/${id}/messages`, {
+      const response = await fetch(messagesUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -115,7 +122,7 @@ export default function JobChatScreen() {
         return;
       }
 
-      await fetch(`${API_URL}/api/jobs/${id}/messages/read`, {
+      await fetch(`${messagesUrl}/read`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -175,7 +182,7 @@ export default function JobChatScreen() {
         return;
       }
 
-      const response = await fetch(`${API_URL}/api/jobs/${id}/messages`, {
+      const response = await fetch(messagesUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -238,7 +245,7 @@ export default function JobChatScreen() {
     return () => {
       clearInterval(interval);
     };
-  }, [id]);
+  }, [id, applicationId]);
 
   useEffect(() => {
     if (messages.length === 0) {
@@ -282,10 +289,14 @@ export default function JobChatScreen() {
           </Pressable>
 
           <View style={styles.headerTextWrapper}>
-            <Text style={styles.headerTitle}>Czat</Text>
+            <Text style={styles.headerTitle}>
+              {applicationId ? "Rozmowa z kandydatem" : "Czat"}
+            </Text>
 
             <Text style={styles.headerSubtitle}>
-              Rozmowa dotycząca zlecenia
+              {applicationId
+                ? "Rozmowa dotycząca zgłoszenia"
+                : "Rozmowa dotycząca zlecenia"}
             </Text>
           </View>
         </View>

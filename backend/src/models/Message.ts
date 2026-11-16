@@ -2,6 +2,7 @@ import mongoose, { Document, Schema } from "mongoose";
 
 export interface IMessage extends Document {
   job: mongoose.Types.ObjectId;
+  application?: mongoose.Types.ObjectId | null;
   sender?: mongoose.Types.ObjectId;
   type: "user" | "system";
   eventKey?:
@@ -23,6 +24,12 @@ const messageSchema = new Schema<IMessage>(
       ref: "Job",
       required: true,
       index: true,
+    },
+
+    application: {
+      type: Schema.Types.ObjectId,
+      ref: "JobApplication",
+      default: null,
     },
 
     sender: {
@@ -70,6 +77,12 @@ const messageSchema = new Schema<IMessage>(
 
 messageSchema.index({
   job: 1,
+  createdAt: 1,
+});
+
+messageSchema.index({
+  job: 1,
+  application: 1,
   createdAt: 1,
 });
 
