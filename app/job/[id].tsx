@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useCallback, useState } from "react";
-
 import {
   ActivityIndicator,
   Alert,
@@ -13,9 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
-
 import { SafeAreaView } from "react-native-safe-area-context";
-
 import { API_URL } from "../../constants/api";
 
 type UserData = {
@@ -91,6 +88,7 @@ export default function JobDetailsScreen() {
 
   const [applying, setApplying] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
+  const [applicationId, setApplicationId] = useState<string | null>(null);
 
   const [applicationStatus, setApplicationStatus] = useState<
     "pending" | "accepted" | "rejected" | null
@@ -154,7 +152,6 @@ export default function JobDetailsScreen() {
       setCurrentUserId(userData._id);
 
       const isOwner = jobData.author?._id === userData._id;
-
       const isAssignedWorker = jobData.assignedTo?._id === userData._id;
 
       if (jobData.status === "completed" && (isOwner || isAssignedWorker)) {
@@ -178,7 +175,6 @@ export default function JobDetailsScreen() {
           }
         } catch (error) {
           console.error("Fetch review status error:", error);
-
           setHasReviewed(false);
         }
       } else {
@@ -224,11 +220,12 @@ export default function JobDetailsScreen() {
           setHasApplied(applicationData.applied);
 
           setApplicationStatus(applicationData.application?.status ?? null);
+
+          setApplicationId(applicationData.application?._id ?? null);
         }
       }
     } catch (error) {
       console.error("Job details error:", error);
-
       Alert.alert("Błąd połączenia", "Nie udało się połączyć z backendem.");
     } finally {
       setLoading(false);
@@ -279,10 +276,11 @@ export default function JobDetailsScreen() {
       setHasApplied(true);
       setApplicationStatus("pending");
 
+      await fetchData();
+
       Alert.alert("Gotowe", "Zgłoszenie zostało wysłane.");
     } catch (error) {
       console.error("Apply to job error:", error);
-
       Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
     } finally {
       setApplying(false);
@@ -325,11 +323,11 @@ export default function JobDetailsScreen() {
 
       setHasApplied(false);
       setApplicationStatus(null);
+      setApplicationId(null);
 
       Alert.alert("Gotowe", "Zgłoszenie zostało wycofane.");
     } catch (error) {
       console.error("Withdraw application error:", error);
-
       Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
     } finally {
       setWithdrawing(false);
@@ -393,13 +391,11 @@ export default function JobDetailsScreen() {
       await fetchData();
     } catch (error) {
       console.error("Accept application error:", error);
-
       Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
     } finally {
       setAcceptingApplicationId(null);
     }
   };
-
   const handleAcceptApplication = (
     applicationId: string,
     firstName: string,
@@ -460,7 +456,6 @@ export default function JobDetailsScreen() {
       await fetchData();
     } catch (error) {
       console.error("Start job error:", error);
-
       Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
     } finally {
       setStartingJob(false);
@@ -526,7 +521,6 @@ export default function JobDetailsScreen() {
       await fetchData();
     } catch (error) {
       console.error("Request completion error:", error);
-
       Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
     } finally {
       setRequestingCompletion(false);
@@ -589,7 +583,6 @@ export default function JobDetailsScreen() {
       await fetchData();
     } catch (error) {
       console.error("Complete job error:", error);
-
       Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
     } finally {
       setCompletingJob(false);
@@ -649,7 +642,6 @@ export default function JobDetailsScreen() {
       await fetchData();
     } catch (error) {
       console.error("Cancel job error:", error);
-
       Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
     } finally {
       setCancellingJob(false);
@@ -713,7 +705,6 @@ export default function JobDetailsScreen() {
       ]);
     } catch (error) {
       console.error("Delete job error:", error);
-
       Alert.alert("Błąd", "Nie udało się połączyć z backendem.");
     } finally {
       setDeleting(false);
@@ -761,9 +752,7 @@ export default function JobDetailsScreen() {
   }
 
   const isOwner = job.author?._id === currentUserId;
-
   const isAssignedWorker = job.assignedTo?._id === currentUserId;
-
   const isJobParticipant = isOwner || isAssignedWorker;
 
   return (
@@ -775,7 +764,6 @@ export default function JobDetailsScreen() {
         <View style={styles.headerRow}>
           <Pressable style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={24} color="#1E2A5A" />
-
             <Text style={styles.backText}>Wróć</Text>
           </Pressable>
 
@@ -808,7 +796,6 @@ export default function JobDetailsScreen() {
                     }}
                   >
                     <Ionicons name="create-outline" size={20} color="#1F2937" />
-
                     <Text style={styles.menuItemText}>Edytuj</Text>
                   </Pressable>
 
@@ -820,7 +807,6 @@ export default function JobDetailsScreen() {
                     disabled={deleting}
                   >
                     <Ionicons name="trash-outline" size={20} color="#DC2626" />
-
                     <Text style={styles.deleteMenuText}>Usuń</Text>
                   </Pressable>
                 </View>
@@ -842,7 +828,6 @@ export default function JobDetailsScreen() {
         <View style={styles.metaRow}>
           <View style={styles.locationRow}>
             <Ionicons name="location-outline" size={18} color="#64748B" />
-
             <Text style={styles.location}>{job.city}</Text>
           </View>
 
@@ -882,7 +867,6 @@ export default function JobDetailsScreen() {
             <Text style={styles.description}>{job.description}</Text>
           </View>
         </View>
-
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Zleceniodawca</Text>
 
@@ -1020,9 +1004,7 @@ export default function JobDetailsScreen() {
                 >
                   {application.applicant.avatar ? (
                     <Image
-                      source={{
-                        uri: application.applicant.avatar,
-                      }}
+                      source={{ uri: application.applicant.avatar }}
                       style={styles.applicantAvatar}
                     />
                   ) : (
@@ -1048,26 +1030,51 @@ export default function JobDetailsScreen() {
                 </Pressable>
 
                 {application.status === "pending" && (
-                  <Pressable
-                    style={[
-                      styles.selectApplicantButton,
-                      acceptingApplicationId !== null && styles.buttonDisabled,
-                    ]}
-                    disabled={acceptingApplicationId !== null}
-                    onPress={() =>
-                      handleAcceptApplication(
-                        application._id,
-                        application.applicant.firstName,
-                        application.applicant.lastName,
-                      )
-                    }
-                  >
-                    <Text style={styles.selectApplicantButtonText}>
-                      {acceptingApplicationId === application._id
-                        ? "Wybieranie..."
-                        : "Wybierz kandydata"}
-                    </Text>
-                  </Pressable>
+                  <>
+                    <Pressable
+                      style={styles.applicationChatButton}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/job/chat/[id]",
+                          params: {
+                            id: job._id,
+                            applicationId: application._id,
+                          },
+                        })
+                      }
+                    >
+                      <Ionicons
+                        name="chatbubble-ellipses-outline"
+                        size={19}
+                        color="#2563EB"
+                      />
+                      <Text style={styles.applicationChatButtonText}>
+                        Napisz wiadomość
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={[
+                        styles.selectApplicantButton,
+                        acceptingApplicationId !== null &&
+                          styles.buttonDisabled,
+                      ]}
+                      disabled={acceptingApplicationId !== null}
+                      onPress={() =>
+                        handleAcceptApplication(
+                          application._id,
+                          application.applicant.firstName,
+                          application.applicant.lastName,
+                        )
+                      }
+                    >
+                      <Text style={styles.selectApplicantButtonText}>
+                        {acceptingApplicationId === application._id
+                          ? "Wybieranie..."
+                          : "Wybierz kandydata"}
+                      </Text>
+                    </Pressable>
+                  </>
                 )}
               </View>
             ))}
@@ -1162,7 +1169,6 @@ export default function JobDetailsScreen() {
             </View>
           </View>
         )}
-
         {isOwner &&
           job.status === "in_progress" &&
           !job.completionRequested && (
@@ -1175,7 +1181,7 @@ export default function JobDetailsScreen() {
                 </Text>
 
                 <Text style={styles.jobActionText}>
-                  Wykonawca realizuje zlecenie. Gdy oznaczy pracę jako wykonaną,
+                  Wykonawca realizuje zlecenie. Gdy oznaczy pracę jako wykonana,
                   pojawi się tutaj możliwość potwierdzenia zakończenia.
                 </Text>
               </View>
@@ -1326,6 +1332,42 @@ export default function JobDetailsScreen() {
                     </Text>
                   </View>
                 </View>
+                {applicationId && (
+                  <Pressable
+                    style={styles.chatButton}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/job/chat/[id]",
+                        params: {
+                          id: job._id,
+                          applicationId: applicationId,
+                        },
+                      })
+                    }
+                  >
+                    <View style={styles.chatIcon}>
+                      <Ionicons
+                        name="chatbubble-ellipses-outline"
+                        size={23}
+                        color="#2563EB"
+                      />
+                    </View>
+
+                    <View style={styles.chatButtonContent}>
+                      <Text style={styles.chatButtonTitle}>Otwórz czat</Text>
+
+                      <Text style={styles.chatButtonSubtitle}>
+                        Napisz wiadomość do zleceniodawcy
+                      </Text>
+                    </View>
+
+                    <Ionicons
+                      name="chevron-forward"
+                      size={21}
+                      color="#94A3B8"
+                    />
+                  </Pressable>
+                )}
 
                 <Pressable
                   style={[
@@ -1450,6 +1492,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#E5E7EB",
+  },
+
+  applicationChatButton: {
+    marginTop: 14,
+    backgroundColor: "#EFF6FF",
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+
+  applicationChatButtonText: {
+    color: "#2563EB",
+    fontSize: 15,
+    fontWeight: "700",
   },
 
   dropdownMenu: {

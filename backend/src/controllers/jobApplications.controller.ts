@@ -2,6 +2,7 @@ import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import Job from "../models/Job";
 import JobApplication from "../models/JobApplication";
+import { createSystemMessage } from "../services/systemMessage.service";
 
 export const applyToJob = async (req: AuthRequest, res: Response) => {
   try {
@@ -235,6 +236,16 @@ export const acceptApplication = async (req: AuthRequest, res: Response) => {
     job.assignedTo = application.applicant;
 
     await job.save();
+
+    try {
+      await createSystemMessage({
+        jobId: job._id.toString(),
+        eventKey: "worker_selected",
+        content: "Wybrano wykonawcę do realizacji tego zlecenia.",
+      });
+    } catch (error) {
+      console.error("Create worker selected system message error:", error);
+    }
 
     return res.status(200).json({
       message: "Kandydat został wybrany.",

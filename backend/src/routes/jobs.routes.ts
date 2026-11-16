@@ -22,8 +22,11 @@ import {
 } from "../controllers/jobs.controller";
 
 import {
+  getApplicationMessages,
   getJobMessages,
+  markApplicationMessagesAsRead,
   markJobMessagesAsRead,
+  sendApplicationMessage,
   sendJobMessage,
 } from "../controllers/chat.controller";
 
@@ -53,6 +56,24 @@ router.get("/:id/messages", authMiddleware, getJobMessages);
 router.post("/:id/messages", authMiddleware, sendJobMessage);
 
 router.patch("/:id/messages/read", authMiddleware, markJobMessagesAsRead);
+
+router.get(
+  "/applications/:applicationId/messages",
+  authMiddleware,
+  getApplicationMessages,
+);
+
+router.post(
+  "/applications/:applicationId/messages",
+  authMiddleware,
+  sendApplicationMessage,
+);
+
+router.patch(
+  "/applications/:applicationId/messages/read",
+  authMiddleware,
+  markApplicationMessagesAsRead,
+);
 
 router.post("/:id/reviews", authMiddleware, createReview);
 

@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
 import Job from "../models/Job";
+import { createSystemMessage } from "../services/systemMessage.service";
 
 export const cancelJob = async (req: AuthRequest, res: Response) => {
   try {
@@ -48,6 +49,16 @@ export const cancelJob = async (req: AuthRequest, res: Response) => {
     job.completionRequested = false;
 
     await job.save();
+
+    try {
+      await createSystemMessage({
+        jobId: job._id.toString(),
+        eventKey: "job_cancelled",
+        content: "Zlecenie zostało anulowane.",
+      });
+    } catch (error) {
+      console.error("Create job cancelled system message error:", error);
+    }
 
     const populatedJob = await Job.findById(job._id)
       .populate("author", "firstName lastName avatar city")

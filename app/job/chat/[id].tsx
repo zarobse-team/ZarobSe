@@ -30,7 +30,9 @@ type Sender = {
 type Message = {
   _id: string;
   job: string;
-  sender: Sender;
+  sender?: Sender;
+  type?: "user" | "system";
+  eventKey?: string;
   content: string;
   readAt?: string | null;
   createdAt: string;
@@ -42,7 +44,14 @@ type CurrentUser = {
 };
 
 export default function JobChatScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, applicationId } = useLocalSearchParams<{
+    id: string;
+    applicationId?: string;
+  }>();
+
+  const messagesUrl = applicationId
+    ? `${API_URL}/api/jobs/applications/${applicationId}/messages`
+    : `${API_URL}/api/jobs/${id}/messages`;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
@@ -66,7 +75,7 @@ export default function JobChatScreen() {
         return;
       }
 
-      const response = await fetch(`${API_URL}/api/jobs/${id}/messages`, {
+      const response = await fetch(messagesUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -113,7 +122,7 @@ export default function JobChatScreen() {
         return;
       }
 
-      await fetch(`${API_URL}/api/jobs/${id}/messages/read`, {
+      await fetch(`${messagesUrl}/read`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -173,7 +182,7 @@ export default function JobChatScreen() {
         return;
       }
 
-      const response = await fetch(`${API_URL}/api/jobs/${id}/messages`, {
+      const response = await fetch(messagesUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -236,7 +245,7 @@ export default function JobChatScreen() {
     return () => {
       clearInterval(interval);
     };
-  }, [id]);
+  }, [id, applicationId]);
 
   useEffect(() => {
     if (messages.length === 0) {
@@ -280,10 +289,14 @@ export default function JobChatScreen() {
           </Pressable>
 
           <View style={styles.headerTextWrapper}>
-            <Text style={styles.headerTitle}>Czat</Text>
+            <Text style={styles.headerTitle}>
+              {applicationId ? "Rozmowa z kandydatem" : "Czat"}
+            </Text>
 
             <Text style={styles.headerSubtitle}>
-              Rozmowa dotycząca zlecenia
+              {applicationId
+                ? "Rozmowa dotycząca zgłoszenia"
+                : "Rozmowa dotycząca zlecenia"}
             </Text>
           </View>
         </View>
@@ -299,7 +312,28 @@ export default function JobChatScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           renderItem={({ item }) => {
+            const isSystem = item.type === "system";
             const isMine = item.sender?._id === currentUserId;
+
+            if (isSystem) {
+              return (
+                <View style={styles.systemMessageRow}>
+                  <View style={styles.systemMessageBubble}>
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={17}
+                      color="#64748B"
+                    />
+
+                    <Text style={styles.systemMessageText}>{item.content}</Text>
+
+                    <Text style={styles.systemMessageTime}>
+                      {formatTime(item.createdAt)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }
 
             return (
               <View
@@ -397,6 +431,34 @@ export default function JobChatScreen() {
 }
 
 const styles = StyleSheet.create({
+  systemMessageRow: {
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+
+  systemMessageBubble: {
+    maxWidth: "90%",
+    backgroundColor: "#E2E8F0",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: "center",
+    gap: 5,
+  },
+
+  systemMessageText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#475569",
+    textAlign: "center",
+  },
+
+  systemMessageTime: {
+    fontSize: 10,
+    color: "#94A3B8",
+  },
+
   container: {
     flex: 1,
     backgroundColor: "#F8FAFC",
