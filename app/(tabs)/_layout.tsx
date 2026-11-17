@@ -34,7 +34,11 @@ export default function TabLayout() {
 				options={{
 					title: "Przeglądaj",
 					tabBarIcon: ({ color, size }) => (
-						<Ionicons name='search' size={size} color={color} />
+						<Ionicons
+							name='search'
+							size={size}
+							color={typeof color === "string" ? color : "#000000"}
+						/>
 					),
 				}}
 			/>
@@ -44,7 +48,11 @@ export default function TabLayout() {
 				options={{
 					title: "Mapa",
 					tabBarIcon: ({ color, size }) => (
-						<Ionicons name='map' size={size} color={color} />
+						<Ionicons
+							name='map'
+							size={size}
+							color={typeof color === "string" ? color : "#000000"}
+						/>
 					),
 				}}
 			/>
@@ -54,7 +62,11 @@ export default function TabLayout() {
 				options={{
 					title: "Dodaj",
 					tabBarIcon: ({ color, size }) => (
-						<Ionicons name='add-circle' size={size} color={color} />
+						<Ionicons
+							name='add-circle'
+							size={size}
+							color={typeof color === "string" ? color : "#000000"}
+						/>
 					),
 				}}
 			/>
@@ -64,7 +76,11 @@ export default function TabLayout() {
 				options={{
 					title: "Moje",
 					tabBarIcon: ({ color, size }) => (
-						<Ionicons name='briefcase' size={size} color={color} />
+						<Ionicons
+							name='briefcase'
+							size={size}
+							color={typeof color === "string" ? color : "#000000"}
+						/>
 					),
 				}}
 			/>
@@ -74,7 +90,11 @@ export default function TabLayout() {
 				options={{
 					title: "Profil",
 					tabBarIcon: ({ color, size }) => (
-						<Ionicons name='person' size={size} color={color} />
+						<Ionicons
+							name='person'
+							size={size}
+							color={typeof color === "string" ? color : "#000000"}
+						/>
 					),
 				}}
 			/>
