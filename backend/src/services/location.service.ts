@@ -24,7 +24,7 @@ export const searchLocations = async (
 
 	console.log("Nominatim request:", url.toString());
 
-	let response;
+	let response: Response;
 
 	try {
 		response = await fetch(url, {
@@ -69,72 +69,6 @@ export type CitySuggestion = {
 	longitude: number;
 };
 
-export const searchCities = async (
-	query: string,
-	limit = 5,
-): Promise<CitySuggestion[]> => {
-	const simcPath = path.join(
-		process.cwd(),
-		"src",
-		"data",
-		"SIMC_Urzedowy_2026-09-27.csv",
-	);
-
-	const csv = fs.readFileSync(simcPath, "utf-8");
-	const lines = csv.split(/\r?\n/);
-
-	const normalizedQuery = query.trim().toLocaleLowerCase("pl-PL");
-
-	const results: (CitySuggestion & { isCity: boolean })[] = [];
-
-	for (let i = 1; i < lines.length; i++) {
-		const columns = lines[i].split(";");
-
-		const rm = columns[4]?.trim();
-		const name = columns[6]?.trim();
-
-		if (!name) {
-			continue;
-		}
-
-		if (!name.toLocaleLowerCase("pl-PL").startsWith(normalizedQuery)) {
-			continue;
-		}
-
-		const normalizedName = name.toLocaleLowerCase("pl-PL");
-
-		const existingIndex = results.findIndex(
-			(item) => item.name.toLocaleLowerCase("pl-PL") === normalizedName,
-		);
-
-		const isCity = rm === "96";
-
-		if (existingIndex !== -1) {
-			if (isCity) {
-				results[existingIndex].isCity = true;
-			}
-
-			continue;
-		}
-
-		results.push({
-			name,
-			latitude: 0,
-			longitude: 0,
-			isCity,
-		});
-	}
-
-	results.sort((a, b) => {
-		if (a.isCity && !b.isCity) return -1;
-		if (!a.isCity && b.isCity) return 1;
-
-		return a.name.localeCompare(b.name, "pl");
-	});
-
-	return results.slice(0, limit).map(({ isCity, ...city }) => city);
-};
-
 export type StreetSuggestion = {
 	name: string;
 	fullName: string;
@@ -148,11 +82,32 @@ const normalizeSearchText = (text: string): string => {
 		.replace(/ł/g, "l");
 };
 
-export const searchStreets = async (
-	city: string,
-	query: string,
-	limit = 5,
-): Promise<StreetSuggestion[]> => {
+type SimcRecord = {
+	name: string;
+	normalizedName: string;
+	rm: string;
+	woj: string;
+	pow: string;
+	sym: string;
+};
+
+type CachedStreet = StreetSuggestion & {
+	normalizedName: string;
+};
+
+type GusCache = {
+	cities: SimcRecord[];
+	streetsBySym: Map<string, CachedStreet[]>;
+	cityStreets: Map<string, CachedStreet[]>;
+};
+
+let gusCache: GusCache | null = null;
+
+const getGusData = (): GusCache => {
+	if (gusCache) {
+		return gusCache;
+	}
+
 	const simcPath = path.join(
 		process.cwd(),
 		"src",
@@ -170,80 +125,34 @@ export const searchStreets = async (
 	const simc = fs.readFileSync(simcPath, "utf-8");
 	const ulic = fs.readFileSync(ulicPath, "utf-8");
 
+	const cities: SimcRecord[] = [];
+	const streetsBySym = new Map<string, CachedStreet[]>();
+
 	const simcLines = simc.split(/\r?\n/);
+
+	for (let i = 1; i < simcLines.length; i++) {
+		const columns = simcLines[i].split(";");
+
+		const name = columns[6]?.trim();
+
+		if (!name) {
+			continue;
+		}
+
+		cities.push({
+			name,
+			normalizedName: normalizeSearchText(name),
+			rm: columns[4]?.trim() || "",
+			woj: columns[0]?.trim() || "",
+			pow: columns[1]?.trim() || "",
+			sym: columns[7]?.trim() || "",
+		});
+	}
+
 	const ulicLines = ulic.split(/\r?\n/);
 
-	const normalizedCity = normalizeSearchText(city.trim());
-	const normalizedQuery = normalizeSearchText(query.trim());
-
-	if (!normalizedCity || !normalizedQuery) {
-		return [];
-	}
-
-	/*
-	 * Znajdujemy główne miasto w SIMC.
-	 *
-	 * RM = 96 oznacza miasto.
-	 */
-	const cityRecord = simcLines
-		.slice(1)
-		.map((line) => line.split(";"))
-		.find((columns) => {
-			const name = columns[6]?.trim();
-			const rm = columns[4]?.trim();
-
-			return (
-				name && normalizeSearchText(name) === normalizedCity && rm === "96"
-			);
-		});
-
-	if (!cityRecord) {
-		return [];
-	}
-
-	const woj = cityRecord[0]?.trim();
-	const pow = cityRecord[1]?.trim();
-
-	/*
-	 * Zbieramy SYM głównego miasta oraz SYM jednostek
-	 * pomocniczych miasta.
-	 *
-	 * Dla Krakowa są to m.in.:
-	 * 0950470 - Kraków-Krowodrza
-	 * 0950718 - Kraków-Nowa Huta
-	 * 0950960 - Kraków-Podgórze
-	 * 0951327 - Kraków-Śródmieście
-	 */
-	const citySyms = new Set<string>();
-
-	const mainCitySym = cityRecord[7]?.trim();
-
-	if (mainCitySym) {
-		citySyms.add(mainCitySym);
-	}
-
-	for (const line of simcLines.slice(1)) {
-		const columns = line.split(";");
-
-		const recordWoj = columns[0]?.trim();
-		const recordPow = columns[1]?.trim();
-		const recordRm = columns[4]?.trim();
-		const sym = columns[7]?.trim();
-
-		if (recordWoj === woj && recordPow === pow && recordRm === "98" && sym) {
-			citySyms.add(sym);
-		}
-	}
-
-	const results: StreetSuggestion[] = [];
-	const uniqueNames = new Set<string>();
-
-	/*
-	 * Szukamy ulic w ULIC należących do znalezionych
-	 * jednostek miasta.
-	 */
-	for (const line of ulicLines.slice(1)) {
-		const columns = line.split(";");
+	for (let i = 1; i < ulicLines.length; i++) {
+		const columns = ulicLines[i].split(";");
 
 		const sym = columns[4]?.trim();
 		const cecha = columns[6]?.trim();
@@ -254,31 +163,173 @@ export const searchStreets = async (
 			continue;
 		}
 
-		if (!citySyms.has(sym)) {
-			continue;
-		}
-
 		const streetName = nazwa2 ? `${nazwa1} ${nazwa2}`.trim() : nazwa1;
 
-		if (!normalizeSearchText(streetName).startsWith(normalizedQuery)) {
-			continue;
-		}
-
-		const normalizedName = streetName.toLocaleLowerCase("pl-PL");
-
-		if (uniqueNames.has(normalizedName)) {
-			continue;
-		}
-
-		uniqueNames.add(normalizedName);
-
-		results.push({
+		const street: CachedStreet = {
 			name: streetName,
 			fullName: cecha ? `${cecha} ${streetName}` : streetName,
+			normalizedName: normalizeSearchText(streetName),
+		};
+
+		const streets = streetsBySym.get(sym) || [];
+		streets.push(street);
+		streetsBySym.set(sym, streets);
+	}
+
+	gusCache = {
+		cities,
+		streetsBySym,
+		cityStreets: new Map<string, CachedStreet[]>(),
+	};
+
+	console.log(
+		`GUS cache loaded: ${cities.length} miejscowości, ` +
+			`${ulicLines.length - 1} wierszy ULIC`,
+	);
+
+	return gusCache;
+};
+
+export const searchCities = async (
+	query: string,
+	limit = 5,
+): Promise<CitySuggestion[]> => {
+	const { cities } = getGusData();
+
+	const normalizedQuery = query.trim().toLocaleLowerCase("pl-PL");
+
+	const results: (CitySuggestion & { isCity: boolean })[] = [];
+	const uniqueNames = new Map<string, number>();
+
+	for (const city of cities) {
+		if (!city.name.toLocaleLowerCase("pl-PL").startsWith(normalizedQuery)) {
+			continue;
+		}
+
+		const normalizedName = city.name.toLocaleLowerCase("pl-PL");
+		const existingIndex = uniqueNames.get(normalizedName);
+		const isCity = city.rm === "96";
+
+		if (existingIndex !== undefined) {
+			if (isCity) {
+				results[existingIndex].isCity = true;
+			}
+
+			continue;
+		}
+
+		uniqueNames.set(normalizedName, results.length);
+
+		results.push({
+			name: city.name,
+			latitude: 0,
+			longitude: 0,
+			isCity,
 		});
 	}
 
-	results.sort((a, b) => a.name.localeCompare(b.name, "pl-PL"));
+	results.sort((a, b) => {
+		if (a.isCity && !b.isCity) return -1;
+		if (!a.isCity && b.isCity) return 1;
 
-	return results.slice(0, limit);
+		return a.name.localeCompare(b.name, "pl");
+	});
+
+	return results.slice(0, limit).map(({ isCity, ...city }) => city);
+};
+
+const getStreetsForCity = (
+	cityName: string,
+	cache: GusCache,
+): CachedStreet[] => {
+	const normalizedCity = normalizeSearchText(cityName.trim());
+
+	const cachedStreets = cache.cityStreets.get(normalizedCity);
+
+	if (cachedStreets) {
+		return cachedStreets;
+	}
+
+	const cityRecord = cache.cities.find(
+		(record) => record.normalizedName === normalizedCity && record.rm === "96",
+	);
+
+	if (!cityRecord) {
+		return [];
+	}
+
+	const citySyms = new Set<string>();
+
+	if (cityRecord.sym) {
+		citySyms.add(cityRecord.sym);
+	}
+
+	// Uwzględniamy jednostki pomocnicze miasta (RM = 98).
+	for (const record of cache.cities) {
+		if (
+			record.woj === cityRecord.woj &&
+			record.pow === cityRecord.pow &&
+			record.rm === "98" &&
+			record.sym
+		) {
+			citySyms.add(record.sym);
+		}
+	}
+
+	const results: CachedStreet[] = [];
+	const uniqueNames = new Set<string>();
+
+	for (const sym of citySyms) {
+		const streets = cache.streetsBySym.get(sym) || [];
+
+		for (const street of streets) {
+			if (uniqueNames.has(street.normalizedName)) {
+				continue;
+			}
+
+			uniqueNames.add(street.normalizedName);
+			results.push(street);
+		}
+	}
+
+	results.sort((a, b) => a.name.localeCompare(b.name, "pl"));
+
+	cache.cityStreets.set(normalizedCity, results);
+
+	return results;
+};
+
+export const searchStreets = async (
+	city: string,
+	query: string,
+	limit = 5,
+): Promise<StreetSuggestion[]> => {
+	const normalizedCity = normalizeSearchText(city.trim());
+	const normalizedQuery = normalizeSearchText(query.trim());
+
+	if (!normalizedCity || !normalizedQuery) {
+		return [];
+	}
+
+	const cache = getGusData();
+	const streets = getStreetsForCity(city, cache);
+
+	const results: StreetSuggestion[] = [];
+
+	for (const street of streets) {
+		if (!street.normalizedName.startsWith(normalizedQuery)) {
+			continue;
+		}
+
+		results.push({
+			name: street.name,
+			fullName: street.fullName,
+		});
+
+		if (results.length >= limit) {
+			break;
+		}
+	}
+
+	return results;
 };
