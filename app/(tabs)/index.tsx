@@ -90,7 +90,14 @@ export default function BrowseScreen() {
 			);
 
 			if (!response.ok) {
-				throw new Error("Nie udało się pobrać licznika");
+				const errorText = await response.text();
+
+				console.error("Notifications API error:", {
+					status: response.status,
+					body: errorText,
+				});
+
+				throw new Error(`Nie udało się pobrać licznika (${response.status})`);
 			}
 
 			const data = await response.json();

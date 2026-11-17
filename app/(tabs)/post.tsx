@@ -75,17 +75,28 @@ export default function PostJobScreen() {
 	const uploadPreset = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 	useEffect(() => {
+		let active = true;
+
 		if (citySelected) {
 			setCitySuggestions([]);
-			return;
+			setCitySearchLoading(false);
+			return () => {
+				active = false;
+			};
 		}
 
 		const query = city.trim();
 
 		if (query.length < 3) {
 			setCitySuggestions([]);
-			return;
+			setCitySearchLoading(false);
+			return () => {
+				active = false;
+			};
 		}
+
+		// Usuwamy wyniki poprzedniego zapytania
+		setCitySuggestions([]);
 
 		const timeout = setTimeout(async () => {
 			try {
@@ -101,22 +112,37 @@ export default function PostJobScreen() {
 
 				const data: LocationSuggestion[] = await response.json();
 
-				setCitySuggestions(data);
+				// Ignorujemy odpowiedzi ze starych zapytań
+				if (active) {
+					setCitySuggestions(data);
+				}
 			} catch (error) {
-				console.error("City suggestions error:", error);
-				setCitySuggestions([]);
+				if (active) {
+					console.error("City suggestions error:", error);
+					setCitySuggestions([]);
+				}
 			} finally {
-				setCitySearchLoading(false);
+				if (active) {
+					setCitySearchLoading(false);
+				}
 			}
-		}, 400);
+		}, 250);
 
-		return () => clearTimeout(timeout);
+		return () => {
+			active = false;
+			clearTimeout(timeout);
+		};
 	}, [city, citySelected]);
 
 	useEffect(() => {
+		let active = true;
+
 		if (!citySelected || streetSelected) {
 			setStreetSuggestions([]);
-			return;
+			setStreetSearchLoading(false);
+			return () => {
+				active = false;
+			};
 		}
 
 		const normalizedCity = city.trim();
@@ -124,8 +150,14 @@ export default function PostJobScreen() {
 
 		if (!normalizedCity || query.length < 2) {
 			setStreetSuggestions([]);
-			return;
+			setStreetSearchLoading(false);
+			return () => {
+				active = false;
+			};
 		}
+
+		// Czyścimy stare podpowiedzi
+		setStreetSuggestions([]);
 
 		const timeout = setTimeout(async () => {
 			try {
@@ -143,16 +175,26 @@ export default function PostJobScreen() {
 
 				const data: StreetSuggestion[] = await response.json();
 
-				setStreetSuggestions(data);
+				// Wyświetlamy tylko aktualne wyniki
+				if (active) {
+					setStreetSuggestions(data);
+				}
 			} catch (error) {
-				console.error("Street suggestions error:", error);
-				setStreetSuggestions([]);
+				if (active) {
+					console.error("Street suggestions error:", error);
+					setStreetSuggestions([]);
+				}
 			} finally {
-				setStreetSearchLoading(false);
+				if (active) {
+					setStreetSearchLoading(false);
+				}
 			}
-		}, 400);
+		}, 250);
 
-		return () => clearTimeout(timeout);
+		return () => {
+			active = false;
+			clearTimeout(timeout);
+		};
 	}, [city, street, citySelected, streetSelected]);
 
 	const openCategoryModal = () => {
@@ -407,7 +449,15 @@ export default function PostJobScreen() {
 			}
 
 			if (!response.ok) {
-				Alert.alert("Błąd", data.message || "Nie udało się utworzyć zlecenia.");
+				console.error("Create job API error:", {
+					status: response.status,
+					data: data,
+				});
+
+				Alert.alert(
+					"Błąd",
+					`${data.message || "Nie udało się utworzyć zlecenia."} (HTTP ${response.status})`,
+				);
 
 				return;
 			}
