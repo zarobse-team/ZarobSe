@@ -95,8 +95,14 @@ type CachedStreet = StreetSuggestion & {
 	normalizedName: string;
 };
 
+type IndexedCity = CitySuggestion & {
+	normalizedName: string;
+	isCity: boolean;
+};
+
 type GusCache = {
 	cities: SimcRecord[];
+	citySearchIndex: IndexedCity[];
 	streetsBySym: Map<string, CachedStreet[]>;
 	cityStreets: Map<string, CachedStreet[]>;
 };
@@ -176,15 +182,52 @@ const getGusData = (): GusCache => {
 		streetsBySym.set(sym, streets);
 	}
 
+	// Przygotowanie indeksu unikalnych miejscowości.
+	// Wykonuje się tylko raz podczas ładowania danych GUS.
+	const uniqueCities = new Map<string, IndexedCity>();
+
+	for (const city of cities) {
+		const key = city.name.toLocaleLowerCase("pl-PL");
+		const existing = uniqueCities.get(key);
+		const isCity = city.rm === "96";
+
+		if (existing) {
+			if (isCity) {
+				existing.isCity = true;
+			}
+
+			continue;
+		}
+
+		uniqueCities.set(key, {
+			name: city.name,
+			normalizedName: key,
+			latitude: 0,
+			longitude: 0,
+			isCity,
+		});
+	}
+
+	const citySearchIndex = [...uniqueCities.values()];
+
+	citySearchIndex.sort((a, b) => {
+		if (a.isCity && !b.isCity) return -1;
+		if (!a.isCity && b.isCity) return 1;
+
+		return a.name.localeCompare(b.name, "pl");
+	});
+
 	gusCache = {
 		cities,
+		citySearchIndex,
 		streetsBySym,
 		cityStreets: new Map<string, CachedStreet[]>(),
 	};
 
 	console.log(
 		`GUS cache loaded: ${cities.length} miejscowości, ` +
-			`${ulicLines.length - 1} wierszy ULIC`,
+			`${ulicLines.length - 1} wierszy ULIC, ` +
+			`${citySearchIndex.length} unikalnych nazw`,
 	);
 
 	return gusCache;
@@ -194,48 +237,33 @@ export const searchCities = async (
 	query: string,
 	limit = 5,
 ): Promise<CitySuggestion[]> => {
-	const { cities } = getGusData();
+	const { citySearchIndex } = getGusData();
 
 	const normalizedQuery = query.trim().toLocaleLowerCase("pl-PL");
 
-	const results: (CitySuggestion & { isCity: boolean })[] = [];
-	const uniqueNames = new Map<string, number>();
+	if (!normalizedQuery || limit <= 0) {
+		return [];
+	}
 
-	for (const city of cities) {
-		if (!city.name.toLocaleLowerCase("pl-PL").startsWith(normalizedQuery)) {
+	const results: CitySuggestion[] = [];
+
+	for (const city of citySearchIndex) {
+		if (!city.normalizedName.startsWith(normalizedQuery)) {
 			continue;
 		}
-
-		const normalizedName = city.name.toLocaleLowerCase("pl-PL");
-		const existingIndex = uniqueNames.get(normalizedName);
-		const isCity = city.rm === "96";
-
-		if (existingIndex !== undefined) {
-			if (isCity) {
-				results[existingIndex].isCity = true;
-			}
-
-			continue;
-		}
-
-		uniqueNames.set(normalizedName, results.length);
 
 		results.push({
 			name: city.name,
-			latitude: 0,
-			longitude: 0,
-			isCity,
+			latitude: city.latitude,
+			longitude: city.longitude,
 		});
+
+		if (results.length >= limit) {
+			break;
+		}
 	}
 
-	results.sort((a, b) => {
-		if (a.isCity && !b.isCity) return -1;
-		if (!a.isCity && b.isCity) return 1;
-
-		return a.name.localeCompare(b.name, "pl");
-	});
-
-	return results.slice(0, limit).map(({ isCity, ...city }) => city);
+	return results;
 };
 
 const getStreetsForCity = (
