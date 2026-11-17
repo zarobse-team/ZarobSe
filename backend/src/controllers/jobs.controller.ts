@@ -48,27 +48,51 @@ export const createJob = async (req: AuthRequest, res: Response) => {
 			});
 		}
 
-		const locations = await searchLocations(`${street}, ${city}`, 1);
+		let normalizedCity = city;
+		let normalizedStreet = street;
+		let latitude: number | undefined = undefined;
+		let longitude: number | undefined = undefined;
 
-		if (locations.length === 0) {
-			return res.status(400).json({
-				message: "Nie znaleziono podanej ulicy w tej miejscowości.",
-			});
+		// Nominatim jest usługą zewnętrzną.
+		// Jej błąd nie może blokować tworzenia zlecenia.
+		try {
+			const locations = await Promise.race([
+				searchLocations(`${street}, ${city}`, 1),
+				new Promise<Awaited<ReturnType<typeof searchLocations>>>((resolve) => {
+					setTimeout(() => resolve([]), 5000);
+				}),
+			]);
+
+			if (locations.length > 0) {
+				const location = locations[0];
+
+				const lat = Number(location.latitude);
+				const lon = Number(location.longitude);
+
+				if (
+					Number.isFinite(lat) &&
+					Number.isFinite(lon) &&
+					lat >= -90 &&
+					lat <= 90 &&
+					lon >= -180 &&
+					lon <= 180
+				) {
+					normalizedCity = location.city || city;
+					normalizedStreet = location.street || street;
+					latitude = lat;
+					longitude = lon;
+				}
+			}
+		} catch (error) {
+			console.warn("Nie udało się pobrać współrzędnych z Nominatim:", error);
 		}
-
-		const {
-			city: normalizedCity,
-			street: normalizedStreet,
-			latitude,
-			longitude,
-		} = locations[0];
 
 		const job = await Job.create({
 			title,
 			description,
 			category,
-			city: normalizedCity || city,
-			street: normalizedStreet || street,
+			city: normalizedCity,
+			street: normalizedStreet,
 			latitude,
 			longitude,
 			budget,
