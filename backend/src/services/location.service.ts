@@ -22,12 +22,23 @@ export const searchLocations = async (
 	url.searchParams.set("countrycodes", "pl");
 	url.searchParams.set("addressdetails", "1");
 
-	const response = await fetch(url, {
-		headers: {
-			"User-Agent": "ZarobSe/1.0",
-			Accept: "application/json",
-		},
-	});
+	console.log("Nominatim request:", url.toString());
+
+	let response;
+
+	try {
+		response = await fetch(url, {
+			headers: {
+				"User-Agent": "ZarobSe/1.0",
+				Accept: "application/json",
+			},
+		});
+
+		console.log("Nominatim response status:", response.status);
+	} catch (error) {
+		console.error("Nominatim connection error:", error);
+		throw error;
+	}
 
 	if (!response.ok) {
 		throw new Error(
