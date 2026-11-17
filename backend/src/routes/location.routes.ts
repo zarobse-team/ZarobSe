@@ -23,8 +23,43 @@ router.get("/search", async (req, res) => {
 	} catch (error) {
 		console.error("Location search error:", error);
 
+		let errorType = "UNKNOWN_ERROR";
+		let upstreamStatus: number | null = null;
+
+		if (error instanceof Error) {
+			if (error.message.startsWith("Nominatim error:")) {
+				errorType = "NOMINATIM_HTTP_ERROR";
+
+				const match = error.message.match(/Nominatim error:\s*(\d{3})/);
+
+				if (match) {
+					upstreamStatus = Number(match[1]);
+				}
+			} else {
+				const cause = (
+					error as Error & {
+						cause?: { code?: string };
+					}
+				).cause;
+
+				if (cause?.code === "ETIMEDOUT") {
+					errorType = "UPSTREAM_TIMEOUT";
+				} else if (cause?.code === "ENETUNREACH") {
+					errorType = "NETWORK_UNREACHABLE";
+				} else if (cause?.code === "ECONNRESET") {
+					errorType = "CONNECTION_RESET";
+				} else if (error.message === "fetch failed") {
+					errorType = "FETCH_FAILED";
+				}
+			}
+		}
+
 		return res.status(500).json({
 			message: "Wystąpił błąd podczas wyszukiwania lokalizacji.",
+			diagnostic: {
+				errorType,
+				upstreamStatus,
+			},
 		});
 	}
 });
